@@ -28,7 +28,7 @@ export default function Landing() {
       <section className="mx-auto max-w-6xl px-4 py-16">
         <div className="grid gap-10 md:grid-cols-2 md:items-center">
           <div className="space-y-6">
-            <div className="inline-flex items-center rounded-full border px-3 py-1 text-sm text-muted-foreground">
+            <div className="inline-flex items-center rounded-full border border-indigo-300 py-2 px-3 bg-indigo-50 text-sm text-muted-foreground">
               Hotel & Shortlet Management Platform
             </div>
 
@@ -37,7 +37,7 @@ export default function Landing() {
             </h1>
 
             <p className="text-lg text-muted-foreground">
-              Bookings, units, payments (manual now, automated later), check-in/check-out workflows,
+              Bookings, units, payments (manual or automated), check-in/check-out workflows, user management
               and multi-tenant workspaces—built for speed and clarity.
             </p>
 
@@ -54,6 +54,8 @@ export default function Landing() {
               <div className="flex items-center gap-2"><Check className="h-4 w-4" /> Multi-tenant workspaces</div>
               <div className="flex items-center gap-2"><Check className="h-4 w-4" /> Hotel + shortlet support</div>
               <div className="flex items-center gap-2"><Check className="h-4 w-4" /> Manual payment confirmation</div>
+              <div className="flex items-center gap-2"><Check className="h-4 w-4" /> Guest information management</div>
+                <div className="flex items-center gap-2"><Check className="h-4 w-4" /> Email notifications to guests</div>
             </div>
           </div>
 
@@ -61,7 +63,7 @@ export default function Landing() {
           <Card className="shadow-lg">
             <CardContent className="p-6">
               <div className="space-y-4">
-                <div className="text-sm font-medium text-muted-foreground">Preview</div>
+                <div className="text-sm font-medium text-muted-foreground">Preview from Dashboard</div>
                 <div className="rounded-lg border p-4">
                   <div className="text-sm font-semibold">Today</div>
                   <div className="mt-3 grid gap-3">
@@ -77,8 +79,13 @@ export default function Landing() {
                       <div className="text-sm font-semibold">Available units</div>
                       <div className="text-xs text-muted-foreground">6 units ready for booking</div>
                     </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-sm font-semibold">Occupancy Rate</div>
+                      <div className="text-xs text-muted-foreground">15.5% month till date</div>
+                    </div>
                   </div>
                 </div>
+                
 
                 <div className="text-xs text-muted-foreground">
                   *Dashboard preview only. Live data appears after login.
@@ -94,7 +101,7 @@ export default function Landing() {
         <div className="mb-8 space-y-2">
           <h2 className="text-3xl font-bold">Features built for operators</h2>
           <p className="text-muted-foreground">
-            Everything you need to run day-to-day operations—without complexity.
+            Everything you need to run day-to-day operations of your business—without complexity.
           </p>
         </div>
 
@@ -102,7 +109,7 @@ export default function Landing() {
           {[
             { title: "Properties & Units", desc: "Manage hotels and shortlet apartments as properties with bookable units." },
             { title: "Bookings", desc: "Create, modify, and track guest bookings across date ranges." },
-            { title: "Manual Payments", desc: "Confirm bank transfers manually now; integrate payment gateways later." },
+            { title: "Manual Payments", desc: "Confirm bank transfers manually now; with option to integrate payment gateways." },
             { title: "Staff Roles", desc: "Admin/Manager/Staff role access for secure operations." },
             { title: "Check-in / Check-out", desc: "Capture verification at check-in/out (face verification planned)." },
             { title: "Multi-tenant", desc: "Separate workspaces per organization using tenant isolation." },
@@ -119,16 +126,11 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="border-t">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-8 md:flex-row md:items-center md:justify-between">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-8 md:flex-row md:items-center md:justify-center">
           <div className="text-sm text-muted-foreground">
             © {new Date().getFullYear()} EazziHotech. All rights reserved.
           </div>
-          <div className="flex gap-4 text-sm text-muted-foreground">
-            <button className="hover:underline" onClick={() => nav("/login")}>Login</button>
-            <button className="hover:underline" onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}>
-              Features
-            </button>
-          </div>
+  
         </div>
       </footer>
     </div>

@@ -8,8 +8,13 @@ import {
   CreditCard,
   Settings,
   LogOut,
+  Users,
   ChevronsUpDown,
+  DoorOpen,
+  DoorClosed,
 } from "lucide-react";
+import logo from "@/assets/logo512.png";
+
 import { toast } from "sonner";
 import { clearAuthSession } from "@/lib/api";
 
@@ -26,8 +31,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     { label: "Dashboard", to: "/app/dashboard", icon: LayoutDashboard },
     { label: "Properties", to: "/app/properties", icon: Building2 },
     { label: "Bookings", to: "/app/bookings", icon: CalendarCheck2 },
+      { label: "Check In", to: "/app/check-in", icon: DoorOpen },
+  { label: "Check Out", to: "/app/check-out", icon: DoorClosed },
     { label: "Payments", to: "/app/payments", icon: CreditCard },
     { label: "Settings", to: "/app/settings", icon: Settings },
+    { label: "Users Management", to: "/app/users", icon: Users },
+
   ];
 
   function logout() {
@@ -39,17 +48,18 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col bg-white-50 rounded-2xl border border-indigo-50 shadow-xsm">
       {/* Brand / Workspace */}
-      <div className="px-4 pt-5 pb-3">
+      <div className="px-4 pt-6 pb-3">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-100 to-indigo-50 ring-1 ring-indigo-50" />
+         <div className="h-10 w-10 rounded-3xl ring-1 ring-indigo-400 overflow-hidden bg-white">
+  <img
+    src={logo}
+    alt="EazziHotech logo"
+    className="h-full w-full object-contain"
+  />
+</div>
           <div className="min-w-0">
             <div className="text-sm font-semibold tracking-tight text-indigo-700">EazziHotech</div>
-            <div className="mt-0.5 inline-flex items-center gap-2 rounded-full border border-indigo-50 bg-white px-2.5 py-1 text-xs text-muted-foreground">
-              <span className="truncate max-w-[150px]">
-                {tenantSlug ? ` (@${tenantSlug})` : tenantName}
-              </span>
-              <ChevronsUpDown className="h-3.5 w-3.5 opacity-70" />
-            </div>
+            
           </div>
         </div>
       </div>
@@ -57,7 +67,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <Separator />
 
       {/* Nav */}
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+      <div className="flex-1 overflow-y-auto px-3 py-6">
         <nav className="space-y-1">
           {items.map((it) => {
             const Icon = it.icon;

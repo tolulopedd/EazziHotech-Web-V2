@@ -7,6 +7,15 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import Properties from "@/pages/Properties";
+import Bookings from "@/pages/Bookings";
+import Payments from "@/pages/Payments";
+import Settings from "@/pages/Settings";
+import Users from "@/pages/Users";
+import MyProfile from "@/pages/MyProfile";
+import CheckInPage from "@/pages/CheckInPage";
+import CheckOutPage from "@/pages/CheckOutPage";
+
+
 
 function RouteError() {
   const err: any = useRouteError();
@@ -40,9 +49,15 @@ export const router = createBrowserRouter([
           { path: "dashboard", element: <Dashboard /> },
 
 { path: "properties", element: <Properties /> },
-          { path: "bookings", element: <div>Bookings</div> },
-          { path: "payments", element: <div>Payments</div> },
-          { path: "settings", element: <div>Settings</div> },
+{ path: "bookings", element: <Bookings /> },
+{ path: "payments", element: <Payments /> },
+{ path: "settings", element: <Settings /> },
+{ path: "users", element: <Users /> },
+{ path: "profile", element: <MyProfile /> },
+{ path: "check-in", element: <CheckInPage /> },
+{ path: "check-out", element: <CheckOutPage /> },
+
+
           { path: "*", element: <div>404</div> },
         ],
       },

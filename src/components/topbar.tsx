@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Menu, LogOut } from "lucide-react";
+import { Menu, LogOut, User } from "lucide-react";
+
+
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -17,11 +19,53 @@ export function Topbar() {
   const tenantName = localStorage.getItem("tenantName") || "Workspace";
   const tenantSlug = localStorage.getItem("tenantSlug") || "";
 
+  const userName = localStorage.getItem("userName") || "User";
+  const userRole = (localStorage.getItem("userRole") || "staff").toLowerCase();
+
+  function goProfile() {
+    nav("/app/profile");
+  }
+
   function logout() {
+    // clear token + refresh token
     clearAuthSession();
+
+    // ✅ also clear tenant/user display data (prevents stale UI)
+    localStorage.removeItem("tenantId");
+    localStorage.removeItem("tenantName");
+    localStorage.removeItem("tenantSlug");
+    localStorage.removeItem("userName");
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("userId");
+
     toast.success("Logged out");
     nav("/login");
   }
+
+  const [ngTime, setNgTime] = useState("");
+
+useEffect(() => {
+  function updateTime() {
+    const formatter = new Intl.DateTimeFormat("en-NG", {
+      timeZone: "Africa/Lagos",
+      hour: "2-digit",
+      minute: "2-digit",
+
+      hour12: true,
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+    });
+
+    setNgTime(formatter.format(new Date()));
+  }
+
+  updateTime(); // initial
+  const timer = setInterval(updateTime, 30_000); // update every 30s
+
+  return () => clearInterval(timer);
+}, []);
+
 
   return (
     <header className="sticky top-0 z-30 border-b border-indigo-100 bg-gradient-to-b from-slate-50 via-white to-slate-100 backdrop-blur">
@@ -32,7 +76,11 @@ export function Topbar() {
           <div className="md:hidden">
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="rounded-xl border-indigo-100 text-indigo-700">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="rounded-xl border-indigo-100 text-indigo-700"
+                >
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
@@ -63,35 +111,44 @@ export function Topbar() {
         </div>
 
         {/* Right actions */}
-    {/* Right actions */}
-<div className="flex items-center gap-3">
-  <div className="text-right hidden sm:block">
-    <p className="text-sm font-medium text-slate-900">
-      {localStorage.getItem("userName") || "User"}
-    </p>
-    <p className="text-xs text-muted-foreground capitalize">
-      {localStorage.getItem("userRole") || "staff"}
-    </p>
-  </div>
-  
-  <Button 
-    variant="ghost" 
-    size="icon" 
-    className="rounded-lg"
-  >
-    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white font-medium text-sm">
-      {(localStorage.getItem("userName") || "U").charAt(0).toUpperCase()}
-    </div>
-  </Button>
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-medium text-slate-900">{userName}</p>
+            <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
+          </div>
 
-  <Button 
-    variant="ghost" 
-    onClick={logout} 
-    className="text-indigo-700 rounded-lg"
-  >
-    <LogOut className="h-4 w-4" />
-  </Button>
+{/* Nigerian Time */}
+<div className="hidden md:flex flex-col items-end px-2">
+  <span className="text-xs text-muted-foreground">Nigeria Time</span>
+  <span className="text-sm font-semibold text-indigo-700 leading-tight">
+    {ngTime}
+  </span>
 </div>
+
+          {/* Profile button */}
+          <Button
+            variant="ghost"
+            className="rounded-lg flex items-center gap-2"
+            onClick={goProfile}
+            title="My Profile"
+          >
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white font-medium text-sm">
+              {userName.charAt(0).toUpperCase()}
+            </div>
+            
+            <User className="h-4 w-4 text-indigo-700 md:hidden" />
+          </Button>
+
+          {/* Logout */}
+          <Button
+            variant="ghost"
+            onClick={logout}
+            className="text-indigo-700 rounded-lg"
+            title="Logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </header>
   );

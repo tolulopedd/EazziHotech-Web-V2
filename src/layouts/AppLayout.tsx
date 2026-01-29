@@ -15,13 +15,17 @@ export function AppLayout() {
         <div className="flex flex-1 flex-col">
           <Topbar />
 
-          <main className="flex-1 overflow-y-auto p-4 md:p-6">
-            <div className="mx-auto max-w-6xl">
-              <div className="rounded-xl bg-background p-4 md:p-6 shadow-sm">
-                <Outlet />
-              </div>
-            </div>
-          </main>
+<main
+  id="dialog-scope"
+  className="relative flex-1 overflow-y-auto p-4 md:p-6"
+>
+  <div className="mx-auto max-w-6xl">
+    <div className="rounded-xl bg-background p-4 md:p-6 shadow-sm">
+      <Outlet />
+    </div>
+  </div>
+</main>
+
         </div>
       </div>
     </div>

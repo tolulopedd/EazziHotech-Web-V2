@@ -7,13 +7,15 @@ import {
   CalendarCheck2,
   CreditCard,
   Users,
-  TrendingUp,
+  Settings,  TrendingUp,
   AlertCircle,
   ArrowRight,
   CheckCircle2,
   Clock,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+
+type UserRole = "admin" | "manager" | "staff";
 
 interface DashboardStats {
   totalProperties: number;
@@ -44,97 +46,47 @@ interface PendingPayment {
 }
 
 interface DashboardData {
+  userRole: UserRole;
   stats: DashboardStats;
   recentBookings: RecentBooking[];
   pendingPayments: PendingPayment[];
   staffCount?: number;
-  userRole: "admin" | "manager" | "staff";
 }
-
-// Mock data for development
-const MOCK_DASHBOARD_DATA: DashboardData = {
-  stats: {
-    totalProperties: 5,
-    totalUnits: 23,
-    activeBookings: 12,
-    pendingPayments: 3,
-    totalRevenue: 45600,
-    occupancyRate: 78,
-  },
-  recentBookings: [
-    {
-      id: "1",
-      guestName: "John Doe",
-      propertyName: "Sunset Villa",
-      checkIn: "2026-01-25",
-      checkOut: "2026-01-28",
-      status: "confirmed",
-      amount: 450,
-    },
-    {
-      id: "2",
-      guestName: "Jane Smith",
-      propertyName: "Ocean View",
-      checkIn: "2026-01-26",
-      checkOut: "2026-02-02",
-      status: "pending",
-      amount: 720,
-    },
-    {
-      id: "3",
-      guestName: "Mike Johnson",
-      propertyName: "Mountain Lodge",
-      checkIn: "2026-01-20",
-      checkOut: "2026-01-24",
-      status: "completed",
-      amount: 600,
-    },
-  ],
-  pendingPayments: [
-    {
-      id: "p1",
-      guestName: "Sarah Williams",
-      propertyName: "Beach House",
-      amount: 850,
-      dueDate: "2026-01-22",
-      status: "overdue",
-    },
-    {
-      id: "p2",
-      guestName: "Tom Brown",
-      propertyName: "Garden Cottage",
-      amount: 320,
-      dueDate: "2026-01-28",
-      status: "pending",
-    },
-  ],
-  staffCount: 8,
-  userRole: "admin",
-};
 
 export default function Dashboard() {
   const nav = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [useMockData, setUseMockData] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    let alive = true;
+
     async function fetchDashboard() {
       try {
+        setLoading(true);
+        setErrMsg(null);
+
         const result = await apiFetch("/api/dashboard");
+        if (!alive) return;
+
         setData(result);
-        setUseMockData(false);
       } catch (err: any) {
-        console.error("Failed to load real dashboard data, using mock data:", err);
-        // Use mock data as fallback
-        setData(MOCK_DASHBOARD_DATA);
-        setUseMockData(true);
+        console.error("Failed to load dashboard:", err);
+        if (!alive) return;
+
+        setErrMsg(err?.message || "Failed to load dashboard");
+        setData(null);
       } finally {
+        if (!alive) return;
         setLoading(false);
       }
     }
 
     fetchDashboard();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   if (loading) {
@@ -155,7 +107,10 @@ export default function Dashboard() {
           <CardContent className="p-6 text-center">
             <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
             <p className="text-lg font-semibold">Failed to load dashboard</p>
-            <p className="text-muted-foreground text-sm mt-2">Please try refreshing the page</p>
+            <p className="text-muted-foreground text-sm mt-2">{errMsg ?? "Please refresh."}</p>
+            <div className="mt-4">
+              <Button onClick={() => window.location.reload()}>Refresh</Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -163,63 +118,61 @@ export default function Dashboard() {
   }
 
   const isAdmin = data.userRole === "admin";
+  const isManager = data.userRole === "manager";
+  const isStaff = data.userRole === "staff";
 
   return (
     <div className="space-y-6">
-      {/* Development Notice */}
-      {useMockData && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="p-4 text-sm text-blue-800">
-            💡 <strong>Development Mode:</strong> Using mock data. Connect your backend API to `/api/dashboard` to use real data.
-          </CardContent>
-        </Card>
-      )}
-
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground mt-2">
-          Welcome back! Here's your {isAdmin ? "workspace overview" : "property performance"}.
+          {isAdmin && "Welcome back! Here's your full workspace overview."}
+          {isManager && "Welcome back! Here's your tenant performance overview."}
+          {isStaff && "Welcome back! Here are bookings and payments to monitor."}
         </p>
       </div>
 
-      {/* Key Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <StatCard
-          label="Properties"
-          value={data.stats.totalProperties}
-          icon={Building2}
-          onClick={() => nav("/app/properties")}
-        />
-        <StatCard
-          label="Units"
-          value={data.stats.totalUnits}
-          icon={Building2}
-          variant="secondary"
-        />
-        <StatCard
-          label="Active Bookings"
-          value={data.stats.activeBookings}
-          icon={CalendarCheck2}
-          onClick={() => nav("/app/bookings")}
-        />
-        <StatCard
-          label="Pending Payments"
-          value={data.stats.pendingPayments}
-          icon={CreditCard}
-          variant="warning"
-          onClick={() => nav("/app/payments")}
-        />
-        <StatCard
-          label="Occupancy"
-          value={`${data.stats.occupancyRate}%`}
-          icon={TrendingUp}
-          variant="success"
-        />
-      </div>
+      {/* Stats Grid (ADMIN + MANAGER only) */}
+      {!isStaff && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <StatCard
+            label="Properties"
+            value={data.stats.totalProperties}
+            icon={Building2}
+            onClick={() => nav("/app/properties")}
+          />
+          <StatCard
+            label="Units"
+            value={data.stats.totalUnits}
+            icon={Building2}
+            variant="secondary"
+            onClick={() => nav("/app/units")}
+          />
+          <StatCard
+            label="Active Bookings"
+            value={data.stats.activeBookings}
+            icon={CalendarCheck2}
+            onClick={() => nav("/app/bookings")}
+          />
+          <StatCard
+            label="Pending Payments"
+            value={data.stats.pendingPayments}
+            icon={CreditCard}
+            variant="warning"
+            onClick={() => nav("/app/payments")}
+          />
+          <StatCard
+            label="Occupancy"
+            value={`${data.stats.occupancyRate}%`}
+            icon={TrendingUp}
+            variant="success"
+          />
+        </div>
+      )}
 
-      {/* Admin Only Section */}
-      {isAdmin && (
+      {/* Admin/Manager cards */}
+      {!isStaff && (
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
@@ -231,7 +184,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="space-y-3">
                 <div>
-                  <p className="text-3xl font-bold">{data.staffCount}</p>
+                  <p className="text-3xl font-bold">{data.staffCount ?? 0}</p>
                   <p className="text-sm text-muted-foreground">Staff members</p>
                 </div>
                 <Button variant="outline" className="w-full" onClick={() => nav("/app/settings")}>
@@ -248,10 +201,12 @@ export default function Dashboard() {
             <CardContent>
               <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
-                  <p className="text-3xl font-bold">₦{(data.stats.totalRevenue / 1000).toFixed(1)}k</p>
+                  <p className="text-3xl font-bold">
+                    ₦{(data.stats.totalRevenue / 1000).toFixed(1)}k
+                  </p>
                   <p className="text-sm text-muted-foreground">Total revenue</p>
                 </div>
-                <div className="text-xs text-green-600">↑ 12% vs last month</div>
+
                 <Button variant="outline" className="w-full" onClick={() => nav("/app/payments")}>
                   View Payments
                 </Button>
@@ -315,27 +270,18 @@ export default function Dashboard() {
           <CardTitle className="text-lg">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 md:grid-cols-4">
-            <ActionButton
-              label="New Booking"
-              onClick={() => nav("/app/bookings")}
-              icon={CalendarCheck2}
-            />
-            <ActionButton
-              label="View Properties"
-              onClick={() => nav("/app/properties")}
-              icon={Building2}
-            />
-            <ActionButton
-              label="Process Payment"
-              onClick={() => nav("/app/payments")}
-              icon={CreditCard}
-            />
-            <ActionButton
-              label="Settings"
-              onClick={() => nav("/app/settings")}
-              icon={Users}
-            />
+          <div className="grid gap-3 md:grid-cols-5">
+            <ActionButton label="Bookings" onClick={() => nav("/app/bookings")} icon={CalendarCheck2} />
+            <ActionButton label="Payments" onClick={() => nav("/app/payments")} icon={CreditCard} />
+            {!isStaff && (
+              <ActionButton label="Properties" onClick={() => nav("/app/properties")} icon={Building2} />
+            )}
+            {(isAdmin || isManager) && (
+              <ActionButton label="Settings" onClick={() => nav("/app/settings")} icon={Settings} />
+            )}
+                        {(isAdmin || isManager) && (
+              <ActionButton label="Users" onClick={() => nav("/app/users")} icon={Users} />
+            )}
           </div>
         </CardContent>
       </Card>
@@ -368,22 +314,23 @@ function StatCard({ label, value, icon: Icon, variant = "default", onClick }: St
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
           <p className="text-2xl font-bold mt-2">{value}</p>
         </div>
-        <Icon className={`h-5 w-5 opacity-70 ${
-          variant === "warning" ? "text-orange-600" : 
-          variant === "success" ? "text-green-600" :
-          variant === "secondary" ? "text-slate-600" :
-          "text-indigo-600"
-        }`} />
+        <Icon
+          className={`h-5 w-5 opacity-70 ${
+            variant === "warning"
+              ? "text-orange-600"
+              : variant === "success"
+                ? "text-green-600"
+                : variant === "secondary"
+                  ? "text-slate-600"
+                  : "text-indigo-600"
+          }`}
+        />
       </div>
     </div>
   );
 }
 
-interface BookingItemProps {
-  booking: RecentBooking;
-}
-
-function BookingItem({ booking }: BookingItemProps) {
+function BookingItem({ booking }: { booking: RecentBooking }) {
   const statusColors = {
     confirmed: "bg-green-100 text-green-800",
     pending: "bg-yellow-100 text-yellow-800",
@@ -391,7 +338,7 @@ function BookingItem({ booking }: BookingItemProps) {
   };
 
   return (
-   <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition">
+    <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition">
       <div className="flex-1">
         <div className="flex items-center gap-3">
           <CheckCircle2 className="h-4 w-4 text-indigo-600" />
@@ -401,12 +348,14 @@ function BookingItem({ booking }: BookingItemProps) {
           </div>
         </div>
       </div>
-      <div className="text-right">
+
+      <div className="text-right mr-4">
         <p className="font-medium">₦{booking.amount}</p>
         <p className="text-xs text-muted-foreground">
           {new Date(booking.checkIn).toLocaleDateString()} - {new Date(booking.checkOut).toLocaleDateString()}
         </p>
       </div>
+
       <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[booking.status]}`}>
         {booking.status}
       </span>
@@ -414,15 +363,11 @@ function BookingItem({ booking }: BookingItemProps) {
   );
 }
 
-interface PaymentItemProps {
-  payment: PendingPayment;
-}
-
-function PaymentItem({ payment }: PaymentItemProps) {
+function PaymentItem({ payment }: { payment: PendingPayment }) {
   const isOverdue = payment.status === "overdue";
 
   return (
-   <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition">
+    <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition">
       <div className="flex-1">
         <div className="flex items-center gap-3">
           {isOverdue ? (
@@ -436,6 +381,7 @@ function PaymentItem({ payment }: PaymentItemProps) {
           </div>
         </div>
       </div>
+
       <div className="text-right">
         <p className="font-medium">₦{payment.amount}</p>
         <p className={`text-xs ${isOverdue ? "text-red-600" : "text-muted-foreground"}`}>
@@ -446,13 +392,15 @@ function PaymentItem({ payment }: PaymentItemProps) {
   );
 }
 
-interface ActionButtonProps {
+function ActionButton({
+  label,
+  icon: Icon,
+  onClick,
+}: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   onClick: () => void;
-}
-
-function ActionButton({ label, icon: Icon, onClick }: ActionButtonProps) {
+}) {
   return (
     <button
       onClick={onClick}

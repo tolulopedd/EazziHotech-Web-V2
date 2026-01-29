@@ -1,5 +1,6 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
+
 export function setAuthSession(payload: {
   tenantId: string;
   accessToken: string;
@@ -19,9 +20,11 @@ export function getTenantId() {
 }
 
 export function clearAuthSession() {
+  localStorage.removeItem("tenantId");
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
 }
+
 
 export async function apiFetch(path: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers || {});

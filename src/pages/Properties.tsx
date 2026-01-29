@@ -361,6 +361,7 @@ export default function Properties() {
                     <div>
                       <Label>Property Name</Label>
                       <Input
+                   
                         placeholder="e.g., Sunset Villa"
                         value={propertyForm.name}
                         onChange={(e) =>
