@@ -15,11 +15,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 
 import { apiFetch } from "@/lib/api";
 
+/* ================= TYPES ================= */
+
 interface Property {
   id: string;
   name: string;
   type: string;
-  address?: string;
 }
 
 interface Unit {
@@ -28,12 +29,11 @@ interface Unit {
   name: string;
   type: string;
   capacity: number;
-  basePrice: string;
+  basePrice: string; // "45000.00"
 }
 
 interface Booking {
   id: string;
-  tenantId: string;
   unitId: string;
 
   status: string;
@@ -44,12 +44,57 @@ interface Booking {
 
   guestName: string | null;
   guestEmail: string | null;
-  guestPhone: string | null;
+
+  totalAmount?: string | null;
+  currency?: string;
 
   createdAt: string;
-  updatedAt: string;
 }
 
+/* ================= HELPERS ================= */
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function startOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function diffNights(from: Date, to: Date) {
+  const a = startOfDay(from).getTime();
+  const b = startOfDay(to).getTime();
+  return Math.max(0, Math.round((b - a) / MS_PER_DAY));
+}
+
+function money2(n: number) {
+  if (!Number.isFinite(n)) return "0.00";
+  return n.toFixed(2);
+}
+
+function isUnpaid(status?: string | null) {
+  return String(status || "").toUpperCase() === "UNPAID";
+}
+
+function isPartPaid(status?: string | null) {
+  return String(status || "").toUpperCase() === "PARTPAID";
+}
+
+function canTakePayment(status?: string | null) {
+  const s = String(status || "").toUpperCase();
+  return s === "UNPAID" || s === "PARTPAID";
+}
+
+function toNoonISO(date: Date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0));
+  return d.toISOString();
+}
+
+function formatRange(r?: DateRange) {
+  if (!r?.from) return "";
+  if (!r.to) return r.from.toDateString();
+  return `${r.from.toDateString()} → ${r.to.toDateString()}`;
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -61,117 +106,168 @@ function formatDate(value?: string | null) {
   return `${day}-${mon}-${year}`;
 }
 
-
-function toNoonISO(date: Date) {
-  // Noon UTC prevents timezone shifting issues
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0));
-  return d.toISOString();
+function toMoneyString(input: string) {
+  const cleaned = input.replace(/[^0-9.]/g, "");
+  const [a, b] = cleaned.split(".");
+  const normalized = b !== undefined ? `${a}.${b.slice(0, 2)}` : a;
+  return normalized;
 }
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+function toNumberSafe(v: string) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
 }
 
-function formatRange(r?: DateRange) {
-  if (!r?.from) return "";
-  if (!r.to) return r.from.toDateString();
-  return `${r.from.toDateString()} → ${r.to.toDateString()}`;
-}
+/* ================= COMPONENT ================= */
 
 export default function Bookings() {
-  // main list
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // dialogs
   const [showBookingDialog, setShowBookingDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
-  // property/unit selection for create booking
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
-  const [selectedUnitId, setSelectedUnitId] = useState<string>("");
+  const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const [selectedUnitId, setSelectedUnitId] = useState("");
 
-  // calendar
   const [range, setRange] = useState<DateRange | undefined>();
   const [unitBookings, setUnitBookings] = useState<Booking[]>([]);
 
-  // create booking guest form (unit/dates come from selectors)
   const [bookingForm, setBookingForm] = useState({
-    guestName: "John Doe",
-    guestEmail: "john@example.com",
+    guestName: "John Thomas",
+    guestEmail: "johntom@eazzihotech.com",
     guestPhone: "",
+  });
+
+  const [editableTotal, setEditableTotal] = useState(""); // string decimal
+  const [totalTouched, setTotalTouched] = useState(false);
+
+  const [paymentForm, setPaymentForm] = useState({
+    amount: "",
+    currency: "NGN",
+    reference: "",
+    notes: "",
   });
 
   const [unitMap, setUnitMap] = useState<Record<string, string>>({});
 
-  // payment form
-  const [paymentForm, setPaymentForm] = useState({
-    amount: "90000.00",
-    currency: "NGN",
-    reference: "Bank transfer - Jan21",
-  });
+  // Derived: selected unit, nights, totalAmount
+  const selectedUnit = useMemo(() => units.find((u) => u.id === selectedUnitId), [units, selectedUnitId]);
+
+  const nights = useMemo(() => {
+    if (!range?.from || !range?.to) return 0;
+    return diffNights(range.from, range.to);
+  }, [range?.from, range?.to]);
+
+  const totalAmount = useMemo(() => {
+    if (!selectedUnit || !range?.from || !range?.to) return null;
+    if (nights <= 0) return null;
+
+    const bp = Number(selectedUnit.basePrice);
+    if (!Number.isFinite(bp) || bp <= 0) return null;
+
+    return money2(bp * nights);
+  }, [selectedUnit, range?.from, range?.to, nights]);
+
+  /* ================= EFFECTS ================= */
 
   useEffect(() => {
     fetchBookings();
     fetchProperties();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ✅ Prefill payment ONCE when dialog opens
+  useEffect(() => {
+    if (!showPaymentDialog || !selectedBooking) return;
+
+    // For PARTPAID or UNPAID, default to remaining or total?
+    // MVP: default to totalAmount (user can type partial amount)
+    setPaymentForm({
+      amount: selectedBooking.totalAmount ? String(selectedBooking.totalAmount) : "",
+      currency: selectedBooking.currency || "NGN",
+      reference: "",
+      notes: "",
+    });
+  }, [showPaymentDialog, selectedBooking?.id]);
+
+  // Auto-fill editable total from computed total (unless user edited)
+  useEffect(() => {
+    if (!totalAmount) return;
+    if (!totalTouched) setEditableTotal(String(totalAmount));
+  }, [totalAmount, totalTouched]);
+
+  /* ================= API ================= */
 
   async function fetchBookings() {
     try {
       setLoading(true);
       const data = await apiFetch("/api/bookings");
       setBookings(data.bookings || []);
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to load bookings");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load bookings");
     } finally {
       setLoading(false);
     }
   }
 
-async function fetchProperties() {
-  try {
-    const data = await apiFetch("/api/properties");
-    const propsList = (data.properties || []) as Property[];
-    setProperties(propsList);
+  async function fetchProperties() {
+    try {
+      const data = await apiFetch("/api/properties");
+      const propsList = (data.properties || []) as Property[];
+      setProperties(propsList);
 
-    // ✅ build unitMap for list display
-    hydrateUnitMapFromAllProperties(propsList);
-  } catch (e: any) {
-    toast.error(e?.message || "Failed to load properties");
+      hydrateUnitMapFromAllProperties(propsList);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load properties");
+    }
   }
-}
 
+  async function fetchUnits(propertyId: string) {
+    try {
+      const data = await apiFetch(`/api/properties/${propertyId}/units`);
+      const list = (data.units || []) as Unit[];
+      setUnits(list);
 
-  
-async function fetchUnits(propertyId: string) {
-  try {
-    const data = await apiFetch(`/api/properties/${propertyId}/units`);
-    const list = (data.units || []) as Unit[];
-    setUnits(list);
-
-    setUnitMap((prev) => {
-      const next = { ...prev };
-      for (const u of list) next[u.id] = u.name;
-      return next;
-    });
-  } catch (e: any) {
-    toast.error(e?.message || "Failed to load units");
+      setUnitMap((prev) => {
+        const next = { ...prev };
+        for (const u of list) next[u.id] = u.name;
+        return next;
+      });
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load units");
+    }
   }
-}
 
+  async function hydrateUnitMapFromAllProperties(propsList?: Property[]) {
+    try {
+      const list = propsList ?? properties;
+      if (!list || list.length === 0) return;
 
+      const results = await Promise.allSettled(list.map((p) => apiFetch(`/api/properties/${p.id}/units`)));
+
+      const nextMap: Record<string, string> = {};
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          const units = (r.value?.units || []) as Unit[];
+          for (const u of units) nextMap[u.id] = u.name;
+        }
+      }
+
+      setUnitMap((prev) => ({ ...prev, ...nextMap }));
+    } catch {
+      // silent
+    }
+  }
 
   async function fetchBookingsForUnit(unitId: string) {
     try {
       const data = await apiFetch(`/api/bookings?unitId=${encodeURIComponent(unitId)}`);
       const list: Booking[] = data.bookings || [];
 
-      // Only block dates for active bookings
       const active = list.filter((b) =>
         ["PENDING", "CONFIRMED", "CHECKED_IN"].includes(String(b.status).toUpperCase())
       );
@@ -185,100 +281,83 @@ async function fetchUnits(propertyId: string) {
 
   function isDateBooked(date: Date) {
     const t = startOfDay(date).getTime();
-
-    // block [checkIn, checkOut) — checkOut day is allowed as next booking start
     return unitBookings.some((b) => {
       const s = startOfDay(new Date(b.checkIn)).getTime();
       const e = startOfDay(new Date(b.checkOut)).getTime();
-      return t >= s && t < e;
+      return t >= s && t < e; // [checkIn, checkOut)
     });
   }
 
-
-  async function hydrateUnitMapFromAllProperties(propsList?: Property[]) {
-  try {
-    const list = propsList ?? properties;
-    if (!list || list.length === 0) return;
-
-    const results = await Promise.allSettled(
-      list.map((p) => apiFetch(`/api/properties/${p.id}/units`))
-    );
-
-    const nextMap: Record<string, string> = {};
-
-    for (const r of results) {
-      if (r.status === "fulfilled") {
-        const units = (r.value?.units || []) as Unit[];
-        for (const u of units) nextMap[u.id] = u.name;
-      }
-    }
-
-    setUnitMap((prev) => ({ ...prev, ...nextMap }));
-  } catch {
-    // Silent: bookings page should still work even if unit names fail
-  }
-}
-
+  /* ================= CREATE BOOKING ================= */
 
   async function handleCreateBooking() {
-    if (!selectedUnitId) {
-      toast.error("Please select a unit");
-      return;
-    }
-    if (!range?.from || !range?.to) {
-      toast.error("Please select check-in and check-out dates");
-      return;
-    }
+    if (!selectedUnitId) return toast.error("Please select a unit");
+    if (!range?.from || !range?.to) return toast.error("Please select check-in and check-out dates");
+    if (!totalAmount) return toast.error("Total amount could not be calculated.");
 
-    const checkInISO = toNoonISO(range.from);
-    const checkOutISO = toNoonISO(range.to);
+    const finalTotal = editableTotal ? money2(toNumberSafe(editableTotal)) : totalAmount;
+    const finalNum = toNumberSafe(finalTotal);
+
+    if (!Number.isFinite(finalNum) || finalNum <= 0) {
+      toast.error("Total amount must be a valid number greater than 0.");
+      return;
+    }
 
     try {
       const data = await apiFetch("/api/bookings", {
         method: "POST",
         body: JSON.stringify({
           unitId: selectedUnitId,
-          checkIn: checkInISO,
-          checkOut: checkOutISO,
+          checkIn: toNoonISO(range.from),
+          checkOut: toNoonISO(range.to),
           guestName: bookingForm.guestName || null,
           guestEmail: bookingForm.guestEmail || null,
           guestPhone: bookingForm.guestPhone ? bookingForm.guestPhone : null,
+          totalAmount: finalTotal,
+          currency: "NGN",
         }),
       });
 
       toast.success("Booking created");
       setShowBookingDialog(false);
 
-      // Reset dialog state
       setSelectedPropertyId("");
       setSelectedUnitId("");
       setUnits([]);
       setRange(undefined);
       setUnitBookings([]);
-      setBookingForm({
-        guestName: "John Doe",
-        guestEmail: "john@example.com",
-        guestPhone: "",
-      });
+      setBookingForm({ guestName: "John Thomas", guestEmail: "johntom@eazzihotech.com", guestPhone: "" });
+      setEditableTotal("");
+      setTotalTouched(false);
 
-      // update list quickly
-      if (data?.booking) {
-        setBookings((prev) => [data.booking, ...prev]);
-      } else {
-        fetchBookings();
-      }
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to create booking");
+      if (data?.booking) setBookings((prev) => [data.booking, ...prev]);
+      else fetchBookings();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to create booking");
     }
   }
 
+  /* ================= PAYMENT ================= */
+
   async function handleRecordPayment() {
-    if (!selectedBooking) {
-      toast.error("Select a booking first");
+    if (!selectedBooking) return;
+
+    // ✅ allow payment for UNPAID or PARTPAID
+    if (!canTakePayment(selectedBooking.paymentStatus)) {
+      toast.error("Payment allowed only for UNPAID or PARTPAID bookings");
       return;
     }
-    if (!paymentForm.amount || !paymentForm.currency || !paymentForm.reference) {
-      toast.error("amount, currency and reference are required");
+
+    const amt = toMoneyString(paymentForm.amount);
+    const amtNum = toNumberSafe(amt);
+
+    if (!amt || !Number.isFinite(amtNum) || amtNum <= 0) {
+      toast.error("Enter a valid amount greater than 0.");
+      return;
+    }
+
+    if (!paymentForm.reference) {
+      toast.error("Reference is required");
       return;
     }
 
@@ -286,51 +365,36 @@ async function fetchUnits(propertyId: string) {
       await apiFetch(`/api/bookings/${selectedBooking.id}/payments`, {
         method: "POST",
         body: JSON.stringify({
-          amount: paymentForm.amount,
+          amount: amt, // ✅ backend expects string
           currency: paymentForm.currency,
           reference: paymentForm.reference,
+          notes: paymentForm.notes || null,
         }),
       });
 
       toast.success("Payment recorded");
+
+      // ✅ Do NOT force payment status on frontend anymore — backend recalculates
+      await fetchBookings();
+
       setShowPaymentDialog(false);
       setSelectedBooking(null);
-      fetchBookings();
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to record payment");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to record payment");
     }
   }
 
-  const sortedBookings = useMemo(() => {
-    return [...bookings].sort((a, b) => {
-      const ta = new Date(a.createdAt).getTime();
-      const tb = new Date(b.createdAt).getTime();
-      return tb - ta;
-    });
-  }, [bookings]);
+  /* ================= UI ================= */
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center space-y-3">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto" />
-          <p className="text-muted-foreground">Loading bookings...</p>
-        </div>
-      </div>
-    );
-  }
-
-  
+  if (loading) return <div className="p-10 text-center">Loading bookings…</div>;
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
-          <p className="text-muted-foreground mt-2">
-            Create bookings, record payments, and track status.
-          </p>
+          <p className="text-muted-foreground mt-2">Create bookings, record payments, and track status.</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -366,7 +430,8 @@ async function fetchUnits(propertyId: string) {
                       setUnits([]);
                       setRange(undefined);
                       setUnitBookings([]);
-
+                      setEditableTotal("");
+                      setTotalTouched(false);
                       if (pid) fetchUnits(pid);
                     }}
                   >
@@ -391,29 +456,28 @@ async function fetchUnits(propertyId: string) {
                       setSelectedUnitId(uid);
                       setRange(undefined);
                       setUnitBookings([]);
+                      setEditableTotal("");
+                      setTotalTouched(false);
                       if (uid) fetchBookingsForUnit(uid);
                     }}
                   >
-                    <option value="">
-                      {selectedPropertyId ? "Select unit" : "Select property first"}
-                    </option>
+                    <option value="">{selectedPropertyId ? "Select unit" : "Select property first"}</option>
                     {units.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name} • {u.type} • cap {u.capacity} • ₦{u.basePrice}
                       </option>
                     ))}
                   </select>
-
-                  <p className="text-xs text-muted-foreground">
-                    Unit ID is saved automatically (we show unit names here).
-                  </p>
                 </div>
 
-                {/* Date range */}
+                {/* Dates */}
                 <div className="space-y-2">
-                  <Label>Dates  <p className="text-xs text-slate-400">
-                    First Click-Start Date, Second Click-End Date and Double click to reset.
-                  </p></Label>
+                  <Label>
+                    Dates{" "}
+                    <p className="text-xs text-slate-400">
+                      First click = start date, second click = end date. Double click to reset.
+                    </p>
+                  </Label>
 
                   <Popover>
                     <PopoverTrigger asChild>
@@ -448,10 +512,44 @@ async function fetchUnits(propertyId: string) {
                       />
                     </PopoverContent>
                   </Popover>
+                </div>
+
+                {/* Total */}
+                <div className="rounded-lg border border-slate-200 p-3 bg-slate-50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">Total Amount</p>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">₦</span>
+                      <Input
+                        className="h-9 w-40 text-right font-semibold"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={editableTotal}
+                        disabled={!totalAmount}
+                        onChange={(e) => {
+                          setTotalTouched(true);
+                          setEditableTotal(toMoneyString(e.target.value));
+                        }}
+                      />
+                    </div>
+                  </div>
 
                   <p className="text-xs text-muted-foreground">
-                    Past and already-booked dates are disabled.
+                    {selectedUnit && nights > 0
+                      ? `${nights} night(s) × ₦${selectedUnit.basePrice} = ₦${totalAmount}`
+                      : "Select unit and dates to compute total."}
                   </p>
+
+                  {totalAmount && editableTotal && editableTotal !== totalAmount && (
+                    <p className="text-xs text-amber-700">
+                      Discount applied: ₦
+                      {money2(
+                        Math.max(0, (toNumberSafe(totalAmount) || 0) - (toNumberSafe(editableTotal) || 0))
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 {/* Guest */}
@@ -461,9 +559,7 @@ async function fetchUnits(propertyId: string) {
                     <Input
                       placeholder="John Doe"
                       value={bookingForm.guestName}
-                      onChange={(e) =>
-                        setBookingForm({ ...bookingForm, guestName: e.target.value })
-                      }
+                      onChange={(e) => setBookingForm({ ...bookingForm, guestName: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
@@ -472,9 +568,7 @@ async function fetchUnits(propertyId: string) {
                       type="email"
                       placeholder="john@example.com"
                       value={bookingForm.guestEmail}
-                      onChange={(e) =>
-                        setBookingForm({ ...bookingForm, guestEmail: e.target.value })
-                      }
+                      onChange={(e) => setBookingForm({ ...bookingForm, guestEmail: e.target.value })}
                     />
                   </div>
                 </div>
@@ -484,9 +578,7 @@ async function fetchUnits(propertyId: string) {
                   <Input
                     placeholder="+234..."
                     value={bookingForm.guestPhone}
-                    onChange={(e) =>
-                      setBookingForm({ ...bookingForm, guestPhone: e.target.value })
-                    }
+                    onChange={(e) => setBookingForm({ ...bookingForm, guestPhone: e.target.value })}
                   />
                 </div>
 
@@ -499,17 +591,13 @@ async function fetchUnits(propertyId: string) {
         </div>
       </div>
 
-      {/* List */}
-      {sortedBookings.length === 0 ? (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <p className="text-muted-foreground">No bookings yet</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {sortedBookings.map((b) => (
-            <Card key={b.id} className="border-slate-200">
+      {/* BOOKINGS LIST */}
+      <div className="space-y-3">
+        {bookings.map((b) => {
+          const canPay = canTakePayment(b.paymentStatus);
+
+          return (
+            <Card key={b.id} className="border-slate-200 md:mt-0">
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
@@ -520,18 +608,30 @@ async function fetchUnits(propertyId: string) {
                       </span>
                     </CardTitle>
 
-                 <p className="text-sm text-muted-foreground mt-1">
- Unit: {unitMap?.[b.unitId] ?? b.unitId} • Check-in: {formatDate(b.checkIn)} • Check-out: {formatDate(b.checkOut)}
-
-</p>
-
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Unit: {unitMap?.[b.unitId] ?? b.unitId} • Check-in: {formatDate(b.checkIn)} • Check-out:{" "}
+                      {formatDate(b.checkOut)}
+                    </p>
 
                     <div className="mt-2 flex flex-wrap gap-2">
                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
                         Status: {b.status}
                       </span>
-                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+
+                      {/* Payment badge */}
+                      <span
+                        className={cn(
+                          "px-2 py-1 rounded-full text-xs font-medium",
+                          isUnpaid(b.paymentStatus) && "bg-slate-100 text-slate-800",
+                          isPartPaid(b.paymentStatus) && "bg-amber-100 text-amber-800",
+                          String(b.paymentStatus || "").toUpperCase() === "PAID" && "bg-emerald-100 text-emerald-800"
+                        )}
+                      >
                         Payment: {b.paymentStatus}
+                      </span>
+
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-100">
+                        Total: ₦{b.totalAmount ?? "—"} {b.currency ?? "NGN"}
                       </span>
                     </div>
                   </div>
@@ -539,7 +639,9 @@ async function fetchUnits(propertyId: string) {
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
+                      disabled={!canPay}
                       onClick={() => {
+                        if (!canPay) return;
                         setSelectedBooking(b);
                         setShowPaymentDialog(true);
                       }}
@@ -551,56 +653,51 @@ async function fetchUnits(propertyId: string) {
                 </div>
               </CardHeader>
             </Card>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
 
-      {/* Payment Dialog */}
+      {/* PAYMENT DIALOG */}
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              Record Payment{" "}
-              <span className="text-sm text-muted-foreground font-normal">
-                {selectedBooking ? `(${selectedBooking.id})` : ""}
-              </span>
-            </DialogTitle>
+            <DialogTitle>Record Payment</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
             <div>
-              <Label>Amount</Label>
+              <Label>
+                Amount{" "}
+                <span className="text-xs font-normal text-muted-foreground">(Partial deposit or Full payment)</span>
+              </Label>
               <Input
-                placeholder="90000.00"
+                type="text"
+                inputMode="decimal"
                 value={paymentForm.amount}
-                onChange={(e) =>
-                  setPaymentForm({ ...paymentForm, amount: e.target.value })
-                }
+                onChange={(e) => setPaymentForm({ ...paymentForm, amount: toMoneyString(e.target.value) })}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Currency</Label>
-                <Input
-                  placeholder="NGN"
-                  value={paymentForm.currency}
-                  onChange={(e) =>
-                    setPaymentForm({ ...paymentForm, currency: e.target.value })
-                  }
-                />
-              </div>
+            <div>
+              <Label>
+                Reference{" "}
+                <span className="text-xs font-normal text-muted-foreground">(Cash or Transfer + RefXXXX)</span>
+              </Label>
+              <Input
+                value={paymentForm.reference}
+                onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
+              />
+            </div>
 
-              <div>
-                <Label>Reference</Label>
-                <Input
-                  placeholder="Bank transfer - Jan21"
-                  value={paymentForm.reference}
-                  onChange={(e) =>
-                    setPaymentForm({ ...paymentForm, reference: e.target.value })
-                  }
-                />
-              </div>
+            <div>
+              <Label>
+                Notes <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                value={paymentForm.notes}
+                onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                placeholder="Any note about this payment..."
+              />
             </div>
 
             <Button onClick={handleRecordPayment} className="w-full">

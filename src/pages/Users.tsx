@@ -433,24 +433,24 @@ export default function Users() {
 
             <div className="grid gap-2">
               <Label>Full name</Label>
-              <Input value={createFullName} onChange={(e) => setCreateFullName(e.target.value)} placeholder="John Doe" />
+              <Input value={createFullName} onChange={(e) => setCreateFullName(e.target.value)} placeholder="Firstname Lastname" />
             </div>
 
             <div className="grid gap-2">
               <Label>Phone</Label>
-              <Input value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} placeholder="0905..." />
+              <Input value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} placeholder="0905XXXXXXX" />
             </div>
 
-            <div className="grid gap-2">
+            <div className="grid gap-2 ">
               <Label>Role</Label>
               <Select
                 value={createRole}
                 onValueChange={(v) => setCreateRole(v as Role)}
               >
-                <SelectTrigger>
+                <SelectTrigger >
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent  className="bg-white">
                   {canCreateManager ? <SelectItem value="MANAGER">MANAGER</SelectItem> : null}
                   <SelectItem value="STAFF">STAFF</SelectItem>
                   {canManageAll ? <SelectItem value="ADMIN">ADMIN</SelectItem> : null}
@@ -464,7 +464,7 @@ export default function Users() {
             <div className="grid gap-2">
               <Label>Temporary password</Label>
               <Input value={createTempPassword} onChange={(e) => setCreateTempPassword(e.target.value)} />
-              <p className="text-xs text-muted-foreground">Share this with the user (or email it later).</p>
+              <p className="text-xs text-muted-foreground">The user will receive an email with a link to reset their temporary password.</p>
             </div>
           </div>
 

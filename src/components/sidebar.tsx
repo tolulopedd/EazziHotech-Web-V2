@@ -31,9 +31,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     { label: "Dashboard", to: "/app/dashboard", icon: LayoutDashboard },
     { label: "Properties", to: "/app/properties", icon: Building2 },
     { label: "Bookings", to: "/app/bookings", icon: CalendarCheck2 },
+        { label: "Payments", to: "/app/payments", icon: CreditCard },
       { label: "Check In", to: "/app/check-in", icon: DoorOpen },
   { label: "Check Out", to: "/app/check-out", icon: DoorClosed },
-    { label: "Payments", to: "/app/payments", icon: CreditCard },
     { label: "Settings", to: "/app/settings", icon: Settings },
     { label: "Users Management", to: "/app/users", icon: Users },
 

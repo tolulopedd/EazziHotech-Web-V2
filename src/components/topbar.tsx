@@ -12,7 +12,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar } from "@/components/sidebar";
 import { clearAuthSession } from "@/lib/api";
 
-export function Topbar() {
+export function Topbar({ onMenu }: { onMenu?: () => void })  {
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
 
@@ -76,13 +76,14 @@ useEffect(() => {
           <div className="md:hidden">
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="rounded-xl border-indigo-100 text-indigo-700"
-                >
-                  <Menu className="h-5 w-5" />
-                </Button>
+<Button
+  variant="ghost"
+  size="icon"
+  className="md:hidden"
+  onClick={onMenu}
+>
+  <Menu className="h-5 w-5" />
+</Button>
               </SheetTrigger>
 
               <SheetContent side="left" className="w-72 p-0">
@@ -113,14 +114,15 @@ useEffect(() => {
         {/* Right actions */}
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
-            <p className="text-sm font-medium text-slate-900">{userName}</p>
-            <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
+            <p className="text-sm text-indigo-900 text-muted-foreground capitalize">{userRole}</p>
+            <p className="text-xs font-medium text-indigo-700">{userName}</p>
+
           </div>
 
 {/* Nigerian Time */}
 <div className="hidden md:flex flex-col items-end px-2">
-  <span className="text-xs text-muted-foreground">Nigeria Time</span>
-  <span className="text-sm font-semibold text-indigo-700 leading-tight">
+  <span className="text-sm text-indigo-900  text-muted-foreground">Nigeria Time</span>
+  <span className="text-xs font-medium text-indigo-500 leading-tight">
     {ngTime}
   </span>
 </div>

@@ -147,7 +147,7 @@ export default function Dashboard() {
             value={data.stats.totalUnits}
             icon={Building2}
             variant="secondary"
-            onClick={() => nav("/app/units")}
+            onClick={() => nav("/app/properties")}
           />
           <StatCard
             label="Active Bookings"
@@ -187,7 +187,7 @@ export default function Dashboard() {
                   <p className="text-3xl font-bold">{data.staffCount ?? 0}</p>
                   <p className="text-sm text-muted-foreground">Staff members</p>
                 </div>
-                <Button variant="outline" className="w-full" onClick={() => nav("/app/settings")}>
+                <Button variant="outline" className="w-full" onClick={() => nav("/app/users")}>
                   Manage Team
                 </Button>
               </div>
@@ -208,7 +208,7 @@ export default function Dashboard() {
                 </div>
 
                 <Button variant="outline" className="w-full" onClick={() => nav("/app/payments")}>
-                  View Payments
+                  View Confirmed Payments
                 </Button>
               </div>
             </CardContent>

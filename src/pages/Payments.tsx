@@ -1,7 +1,7 @@
 // src/pages/Payments.tsx
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Search, CreditCard } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -12,17 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
-type PaymentStatus = "PENDING" | "CONFIRMED" | "REJECTED" | string;
+type PaymentStatus = "PENDING" | "CONFIRMED" | "FAILED" | "REFUNDED" | string;
 
 type Payment = {
   id: string;
   tenantId: string;
   bookingId: string;
 
-  method: string; // MANUAL
+  method: string;
   status: PaymentStatus;
 
-  amount: string; // Decimal string
+  amount: string;
   currency: string;
   reference: string | null;
   notes: string | null;
@@ -47,6 +47,18 @@ type Payment = {
     currency: string;
     unit?: { id: string; name: string } | null;
   };
+};
+
+type PendingItem = {
+  bookingId: string;
+  guestName: string | null;
+  unitName?: string | null;
+  bookingStatus: string;
+  paymentStatus: string; // UNPAID | PARTPAID (from BookingPaymentStatus)
+  totalAmount: string; // "45000.00"
+  paidTotal: string;   // "25000.00"
+  outstanding: string; // "20000.00"
+  currency: string;    // "NGN"
 };
 
 function formatDate(value?: string | null) {
@@ -78,35 +90,65 @@ function pillClass(status: string) {
   if (s === "PENDING") return "bg-amber-100 text-amber-800 border-amber-200";
   if (s === "CONFIRMED") return "bg-emerald-100 text-emerald-800 border-emerald-200";
   if (s === "PAID") return "bg-emerald-100 text-emerald-800 border-emerald-200";
-  if (s === "PARTIALLY_PAID") return "bg-indigo-100 text-indigo-800 border-indigo-200";
+  if (s === "PARTPAID" || s === "PARTIALLY_PAID") return "bg-indigo-100 text-indigo-800 border-indigo-200";
   if (s === "UNPAID") return "bg-slate-100 text-slate-800 border-slate-200";
-  if (s === "REJECTED") return "bg-rose-100 text-rose-800 border-rose-200";
+  if (s === "FAILED" || s === "REJECTED") return "bg-rose-100 text-rose-800 border-rose-200";
+  if (s === "REFUNDED") return "bg-purple-100 text-purple-800 border-purple-200";
   return "bg-slate-100 text-slate-800 border-slate-200";
+}
+
+function toMoneyString(input: string) {
+  const cleaned = input.replace(/[^0-9.]/g, "");
+  const [a, b] = cleaned.split(".");
+  return b !== undefined ? `${a}.${b.slice(0, 2)}` : a;
+}
+
+function toNumberSafe(v: string) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
 }
 
 export default function Payments() {
   const [tab, setTab] = useState<"PENDING" | "CONFIRMED">("PENDING");
   const [loading, setLoading] = useState(true);
 
+  // CONFIRMED tab data
   const [payments, setPayments] = useState<Payment[]>([]);
+
+  // PENDING tab data (outstanding balances)
+  const [pending, setPending] = useState<PendingItem[]>([]);
+
   const [query, setQuery] = useState("");
 
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [selected, setSelected] = useState<Payment | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  // Collect payment dialog
+  const [collectOpen, setCollectOpen] = useState(false);
+  const [selectedPending, setSelectedPending] = useState<PendingItem | null>(null);
+  const [collecting, setCollecting] = useState(false);
+  const [collectForm, setCollectForm] = useState({
+    amount: "",
+    currency: "NGN",
+    reference: "",
+    notes: "",
+  });
 
   useEffect(() => {
-    fetchPayments();
+    fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  async function fetchPayments() {
+  async function fetchData() {
     try {
       setLoading(true);
-      const qs = new URLSearchParams();
-      qs.set("status", tab);
-      const data = await apiFetch(`/api/payments?${qs.toString()}`);
-      setPayments(data.payments || []);
+
+      if (tab === "CONFIRMED") {
+        const qs = new URLSearchParams();
+        qs.set("status", "CONFIRMED");
+        const data = await apiFetch(`/api/payments?${qs.toString()}`);
+        setPayments(data.payments || []);
+      } else {
+        const data = await apiFetch(`/api/payments/pending`);
+        setPending(data.items || []);
+      }
     } catch (e: any) {
       toast.error(e?.message || "Failed to load payments");
     } finally {
@@ -114,7 +156,20 @@ export default function Payments() {
     }
   }
 
-  const filtered = useMemo(() => {
+  const filteredPending = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return pending;
+
+    return pending.filter((x) => {
+      const guest = (x.guestName || "").toLowerCase();
+      const unit = (x.unitName || "").toLowerCase();
+      const bid = (x.bookingId || "").toLowerCase();
+      const amt = `${x.totalAmount} ${x.paidTotal} ${x.outstanding}`.toLowerCase();
+      return guest.includes(q) || unit.includes(q) || bid.includes(q) || amt.includes(q);
+    });
+  }, [pending, query]);
+
+  const filteredConfirmed = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return payments;
 
@@ -126,44 +181,60 @@ export default function Payments() {
       const email = (p.booking?.guestEmail || "").toLowerCase();
       const unit = (p.booking?.unit?.name || "").toLowerCase();
       const amt = String(p.amount || "").toLowerCase();
-      return (
-        ref.includes(q) ||
-        bid.includes(q) ||
-        pid.includes(q) ||
-        guest.includes(q) ||
-        email.includes(q) ||
-        unit.includes(q) ||
-        amt.includes(q)
-      );
+      return ref.includes(q) || bid.includes(q) || pid.includes(q) || guest.includes(q) || email.includes(q) || unit.includes(q) || amt.includes(q);
     });
   }, [payments, query]);
 
-  function openConfirm(p: Payment) {
-    setSelected(p);
-    setConfirmOpen(true);
+  function openCollect(item: PendingItem) {
+    setSelectedPending(item);
+    setCollectForm({
+      amount: item.outstanding || "",
+      currency: item.currency || "NGN",
+      reference: "",
+      notes: "",
+    });
+    setCollectOpen(true);
   }
 
-  async function doConfirm() {
-    if (!selected) return;
+  async function doCollect() {
+    if (!selectedPending) return;
+
+    const amt = toMoneyString(collectForm.amount);
+    const amtNum = toNumberSafe(amt);
+
+    if (!amt || !Number.isFinite(amtNum) || amtNum <= 0) {
+      toast.error("Enter a valid amount greater than 0.");
+      return;
+    }
+    if (!collectForm.reference.trim()) {
+      toast.error("Reference is required");
+      return;
+    }
 
     try {
-      setConfirming(true);
-      await apiFetch(`/api/payments/${selected.id}/confirm`, { method: "POST" });
-      toast.success("Payment confirmed");
+      setCollecting(true);
 
-      setConfirmOpen(false);
-      setSelected(null);
+      await apiFetch(`/api/bookings/${selectedPending.bookingId}/payments`, {
+        method: "POST",
+        body: JSON.stringify({
+          amount: amt,
+          currency: collectForm.currency,
+          reference: collectForm.reference.trim(),
+          notes: collectForm.notes || null,
+        }),
+      });
 
-      // Optimistic update: remove from pending
-      if (tab === "PENDING") {
-        setPayments((prev) => prev.filter((x) => x.id !== selected.id));
-      } else {
-        fetchPayments();
-      }
+      toast.success("Payment recorded");
+
+      setCollectOpen(false);
+      setSelectedPending(null);
+
+      // refresh the active tab data
+      await fetchData();
     } catch (e: any) {
-      toast.error(e?.message || "Failed to confirm payment");
+      toast.error(e?.message || "Failed to record payment");
     } finally {
-      setConfirming(false);
+      setCollecting(false);
     }
   }
 
@@ -178,6 +249,8 @@ export default function Payments() {
     );
   }
 
+  const list = tab === "PENDING" ? filteredPending : filteredConfirmed;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -185,12 +258,12 @@ export default function Payments() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
           <p className="text-muted-foreground mt-2">
-            Confirm cash / bank transfer payments. Confirming updates booking payment status automatically.
+            Pending = bookings with outstanding balance. Confirmed = all confirmed payment records.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={fetchPayments}>
+          <Button variant="outline" onClick={fetchData}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
@@ -209,7 +282,7 @@ export default function Payments() {
                 : "border-transparent text-muted-foreground hover:text-slate-900"
             )}
           >
-            Pending
+            Pending (Outstanding)
           </button>
           <button
             onClick={() => setTab("CONFIRMED")}
@@ -228,7 +301,7 @@ export default function Payments() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Search by reference, guest, unit, booking/payment ID..."
+            placeholder="Search by guest, unit, booking/payment ID, amount..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -236,17 +309,61 @@ export default function Payments() {
       </div>
 
       {/* List */}
-      {filtered.length === 0 ? (
+      {list.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <p className="text-muted-foreground">
-              {tab === "PENDING" ? "No pending payments to confirm." : "No confirmed payments found."}
+              {tab === "PENDING" ? "No outstanding balances." : "No confirmed payments found."}
             </p>
           </CardContent>
         </Card>
+      ) : tab === "PENDING" ? (
+        <div className="space-y-3">
+          {filteredPending.map((x) => (
+            <Card key={x.bookingId} className="border-slate-200">
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="text-lg truncate">
+                      Outstanding: {formatMoney(x.outstanding, x.currency)}
+                    </CardTitle>
+
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Booking: <span className="font-mono text-xs">{x.bookingId}</span>
+                    </p>
+
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {x.guestName || "Guest"} • {x.unitName || "—"}
+                    </p>
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className={cn("px-2 py-1 rounded-full text-xs font-medium border", pillClass(x.paymentStatus))}>
+                        Booking Payment: {x.paymentStatus}
+                      </span>
+                      <span className={cn("px-2 py-1 rounded-full text-xs font-medium border", pillClass(x.bookingStatus))}>
+                        Booking Status: {x.bookingStatus}
+                      </span>
+                      <span className="px-2 py-1 rounded-full text-xs font-medium border bg-slate-50 text-slate-700 border-slate-200">
+                        Total: {formatMoney(x.totalAmount, x.currency)}
+                      </span>
+                      <span className="px-2 py-1 rounded-full text-xs font-medium border bg-slate-50 text-slate-700 border-slate-200">
+                        Paid: {formatMoney(x.paidTotal, x.currency)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <Button variant="outline" onClick={() => openCollect(x)}>
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Collect
+                  </Button>
+                </div>
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((p) => {
+          {filteredConfirmed.map((p) => {
             const unitName = p.booking?.unit?.name || p.booking?.unitId || "—";
             const guest = p.booking?.guestName || "Guest";
             const guestEmail = p.booking?.guestEmail ? `(${p.booking.guestEmail})` : "";
@@ -294,13 +411,6 @@ export default function Payments() {
                         </div>
                       ) : null}
                     </div>
-
-                    {tab === "PENDING" ? (
-                      <Button variant="outline" onClick={() => openConfirm(p)}>
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Confirm
-                      </Button>
-                    ) : null}
                   </div>
                 </CardHeader>
               </Card>
@@ -309,49 +419,70 @@ export default function Payments() {
         </div>
       )}
 
-      {/* Confirm dialog */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      {/* Collect dialog */}
+      <Dialog open={collectOpen} onOpenChange={setCollectOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Confirm Payment</DialogTitle>
+            <DialogTitle>Collect Payment</DialogTitle>
           </DialogHeader>
 
-          {selected ? (
+          {selectedPending ? (
             <div className="space-y-4">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="text-sm">
                   <div className="font-medium">
-                    {formatMoney(selected.amount, selected.currency)}
-                    <span className="text-muted-foreground"> • {selected.method}</span>
+                    Outstanding: {formatMoney(selectedPending.outstanding, selectedPending.currency)}
                   </div>
                   <div className="text-muted-foreground mt-1">
-                    Ref: {selected.reference || "—"}
+                    Total: {formatMoney(selectedPending.totalAmount, selectedPending.currency)} • Paid:{" "}
+                    {formatMoney(selectedPending.paidTotal, selectedPending.currency)}
                   </div>
                   <div className="text-muted-foreground mt-1">
-                    Booking: <span className="font-mono text-xs">{selected.bookingId}</span>
+                    Booking: <span className="font-mono text-xs">{selectedPending.bookingId}</span>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Confirm action</Label>
-                <p className="text-sm text-muted-foreground">
-                  This will mark the payment as <span className="font-medium">CONFIRMED</span> and automatically update the
-                  booking payment status to <span className="font-medium">PARTIALLY_PAID</span> or <span className="font-medium">PAID</span>.
-                </p>
+                <Label>Amount</Label>
+                <Input
+                  inputMode="decimal"
+                  value={collectForm.amount}
+                  onChange={(e) => setCollectForm((s) => ({ ...s, amount: toMoneyString(e.target.value) }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Reference</Label>
+                <Input
+                  value={collectForm.reference}
+                  onChange={(e) => setCollectForm((s) => ({ ...s, reference: e.target.value }))}
+                  placeholder="Cash / Transfer Ref..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>
+                  Notes <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  value={collectForm.notes}
+                  onChange={(e) => setCollectForm((s) => ({ ...s, notes: e.target.value }))}
+                  placeholder="Any note..."
+                />
               </div>
 
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={confirming}>
+                <Button variant="outline" onClick={() => setCollectOpen(false)} disabled={collecting}>
                   Cancel
                 </Button>
-                <Button onClick={doConfirm} disabled={confirming}>
-                  {confirming ? "Confirming..." : "Confirm Payment"}
+                <Button onClick={doCollect} disabled={collecting}>
+                  {collecting ? "Recording..." : "Record Payment"}
                 </Button>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">No payment selected.</div>
+            <div className="text-sm text-muted-foreground">No booking selected.</div>
           )}
         </DialogContent>
       </Dialog>
