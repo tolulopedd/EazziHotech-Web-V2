@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ChangeEvent, type KeyboardEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -298,15 +298,15 @@ export default function Users() {
                 className="pl-9"
                 placeholder="Search email or name..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+                onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                   if (e.key === "Enter") setRefreshKey((k) => k + 1);
                 }}
               />
             </div>
 
             <div>
-              <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as any)}>
+              <Select value={roleFilter} onValueChange={(v: string) => setRoleFilter(v as any)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Filter role" />
                 </SelectTrigger>
@@ -320,7 +320,7 @@ export default function Users() {
             </div>
 
             <div>
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+              <Select value={statusFilter} onValueChange={(v: string) => setStatusFilter(v as any)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Filter status" />
                 </SelectTrigger>
@@ -424,7 +424,7 @@ export default function Users() {
             <div className="flex items-center gap-2">
               <Select
                 value={String(pageSize)}
-                onValueChange={(v) => {
+                onValueChange={(v: string) => {
                   const next = Number(v);
                   setPageSize(Number.isFinite(next) ? next : 20);
                   setPage(1);
@@ -467,24 +467,24 @@ export default function Users() {
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label>Email</Label>
-              <Input value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} placeholder="user@company.com" />
+              <Input value={createEmail} onChange={(e: ChangeEvent<HTMLInputElement>) => setCreateEmail(e.target.value)} placeholder="user@company.com" />
             </div>
 
             <div className="grid gap-2">
               <Label>Full name</Label>
-              <Input value={createFullName} onChange={(e) => setCreateFullName(e.target.value)} placeholder="Firstname Lastname" />
+              <Input value={createFullName} onChange={(e: ChangeEvent<HTMLInputElement>) => setCreateFullName(e.target.value)} placeholder="Firstname Lastname" />
             </div>
 
             <div className="grid gap-2">
               <Label>Phone</Label>
-              <Input value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} placeholder="0905XXXXXXX" />
+              <Input value={createPhone} onChange={(e: ChangeEvent<HTMLInputElement>) => setCreatePhone(e.target.value)} placeholder="0905XXXXXXX" />
             </div>
 
             <div className="grid gap-2 ">
               <Label>Role</Label>
               <Select
                 value={createRole}
-                onValueChange={(v) => setCreateRole(v as Role)}
+                onValueChange={(v: string) => setCreateRole(v as Role)}
               >
                 <SelectTrigger >
                   <SelectValue placeholder="Select role" />
@@ -504,7 +504,7 @@ export default function Users() {
               <Label>Temporary password (optional)</Label>
               <Input
                 value={createTempPassword}
-                onChange={(e) => setCreateTempPassword(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setCreateTempPassword(e.target.value)}
                 placeholder="Leave empty to auto-generate secure temp password"
               />
               <p className="text-xs text-muted-foreground">
@@ -539,19 +539,19 @@ export default function Users() {
 
             <div className="grid gap-2">
               <Label>Full name</Label>
-              <Input value={editFullName} onChange={(e) => setEditFullName(e.target.value)} />
+              <Input value={editFullName} onChange={(e: ChangeEvent<HTMLInputElement>) => setEditFullName(e.target.value)} />
             </div>
 
             <div className="grid gap-2">
               <Label>Phone</Label>
-              <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+              <Input value={editPhone} onChange={(e: ChangeEvent<HTMLInputElement>) => setEditPhone(e.target.value)} />
             </div>
 
             <div className="grid gap-2">
               <Label>Role</Label>
               <Select
                 value={editRole}
-                onValueChange={(v) => setEditRole(v as Role)}
+                onValueChange={(v: string) => setEditRole(v as Role)}
                 disabled={myRole !== "ADMIN"}
               >
                 <SelectTrigger>

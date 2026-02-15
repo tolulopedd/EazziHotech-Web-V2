@@ -14,28 +14,104 @@ function toApiUrl(path: string) {
   return `${API_BASE}${path}`;
 }
 
-export async function apiUpload(path: string, formData: FormData) {
+function getApiHeaders(extra?: Record<string, string>) {
   const token = getAuthToken();
   const tenantId = getTenantId();
-
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
   if (tenantId) headers["x-tenant-id"] = tenantId;
+  return { ...headers, ...(extra || {}) };
+}
+
+async function readErrorMessage(res: Response, fallback: string) {
+  try {
+    const j = await res.json();
+    return j?.error?.message || j?.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function postJson(path: string, payload: unknown) {
+  const res = await fetch(toApiUrl(path), {
+    method: "POST",
+    headers: getApiHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    let msg = "Request failed";
+    let code = "";
+    try {
+      const j = await res.json();
+      msg = j?.error?.message || j?.message || msg;
+      code = j?.error?.code || j?.code || "";
+    } catch {}
+    const err = new Error(msg) as Error & { status?: number; code?: string };
+    err.status = res.status;
+    err.code = code;
+    throw err;
+  }
+  return res.json();
+}
+
+async function tryDirectGuestPhotoUpload(path: string, formData: FormData) {
+  const match = path.match(/^\/api\/bookings\/([^/]+)\/guest-photo$/);
+  if (!match) return null;
+
+  const bookingId = match[1];
+  const rawFile = formData.get("file");
+  if (!(rawFile instanceof Blob)) return null;
+
+  const contentType = rawFile.type || "image/jpeg";
+
+  let presign: any;
+  try {
+    presign = await postJson(`/api/bookings/${bookingId}/guest-photo/presign`, {
+      contentType,
+      fileSize: rawFile.size,
+    });
+  } catch (error: any) {
+    const code = String(error?.code || "");
+    const status = Number(error?.status || 0);
+    const allowFallback = status === 404 || code === "STORAGE_NOT_CONFIGURED";
+    if (allowFallback) return null;
+    throw error;
+  }
+
+  const putHeaders: Record<string, string> = {
+    ...(presign?.requiredHeaders || {}),
+  };
+  if (!putHeaders["Content-Type"]) putHeaders["Content-Type"] = contentType;
+
+  const uploadRes = await fetch(String(presign.uploadUrl), {
+    method: String(presign.method || "PUT"),
+    headers: putHeaders,
+    body: rawFile,
+  });
+  if (!uploadRes.ok) {
+    throw new Error("Upload failed");
+  }
+
+  return postJson(`/api/bookings/${bookingId}/guest-photo/confirm`, {
+    photoKey: presign.photoKey,
+    mime: contentType,
+    size: rawFile.size,
+  });
+}
+
+export async function apiUpload(path: string, formData: FormData) {
+  const directResult = await tryDirectGuestPhotoUpload(path, formData);
+  if (directResult) return directResult;
 
   // IMPORTANT: do NOT set Content-Type for FormData
   const res = await fetch(toApiUrl(path), {
     method: "POST",
     body: formData,
-    headers,
+    headers: getApiHeaders(),
   });
 
   if (!res.ok) {
-    let msg = "Upload failed";
-    try {
-      const j = await res.json();
-      msg = j?.error?.message || j?.message || msg;
-    } catch {}
-    throw new Error(msg);
+    throw new Error(await readErrorMessage(res, "Upload failed"));
   }
 
   return res.json();
