@@ -1,24 +1,45 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CalendarCheck2, RefreshCcw, Clipboard, CheckCircle2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiUpload, compressToMaxBytes } from "@/lib/upload";
 
 /* ================= TYPES ================= */
 
 type Booking = {
   id: string;
+  guestId?: string | null;
   status: string;
   checkIn: string;
   checkOut: string;
   guestName?: string | null;
   guestPhone?: string | null;
   guestEmail?: string | null;
+  guestAddress?: string | null;
+  guestNationality?: string | null;
+  idType?: string | null;
+  idNumber?: string | null;
+  idIssuedBy?: string | null;
+  vehiclePlate?: string | null;
   totalAmount?: string | null;
   currency?: string | null;
+  guestPhotoUrl?: string | null; // ✅ NEW
+  guest?: {
+    id: string;
+    fullName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    nationality?: string | null;
+    idType?: string | null;
+    idNumber?: string | null;
+    idIssuedBy?: string | null;
+    vehiclePlate?: string | null;
+  } | null;
   unit?: {
     id: string;
     name: string;
@@ -35,6 +56,24 @@ function startOfDay(d: Date) {
   return x;
 }
 
+function toNullableString(value: string) {
+  const next = value.trim();
+  return next ? next : null;
+}
+
+function getErrorMessage(e: unknown, fallback: string) {
+  if (e && typeof e === "object" && "message" in e) {
+    const msg = (e as { message?: unknown }).message;
+    if (typeof msg === "string" && msg.trim()) return msg;
+  }
+  return fallback;
+}
+
+function isValidEmail(value: string) {
+  if (!value.trim()) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 /* ================= COMPONENT ================= */
 
 export default function CheckInPage() {
@@ -49,6 +88,13 @@ export default function CheckInPage() {
   // modal state
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [activeBooking, setActiveBooking] = useState<Booking | null>(null);
+  const activeBookingIdRef = useRef<string>("");
+
+  const [guestPhotoBlob, setGuestPhotoBlob] = useState<Blob | null>(null);
+  const [guestPhotoPreview, setGuestPhotoPreview] = useState<string>("");
+  const [guestPhotoSize, setGuestPhotoSize] = useState<number>(0);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [updateGuestProfile, setUpdateGuestProfile] = useState(false);
 
   const [checkInForm, setCheckInForm] = useState({
     guestName: "",
@@ -63,23 +109,29 @@ export default function CheckInPage() {
     notes: "",
   });
 
-  const countToday = useMemo(() => todayBookings.length, [todayBookings]);
+  type CheckInFormState = typeof checkInForm;
 
-  async function loadTodayArrivals() {
+  const countToday = useMemo(() => todayBookings.length, [todayBookings]);
+  const guestNameError = !checkInForm.guestName.trim() ? "Guest name is required." : "";
+  const guestEmailError = !isValidEmail(checkInForm.guestEmail) ? "Enter a valid email address." : "";
+  const canSubmitCheckIn = Boolean(activeBooking) && !guestNameError && !guestEmailError && busyId !== activeBooking?.id;
+  const linkedGuestId = activeBooking?.guestId || activeBooking?.guest?.id || "";
+
+  const loadTodayArrivals = useCallback(async () => {
     setError("");
     setLoadingToday(true);
     try {
       const data = await apiFetch("/api/bookings/arrivals/today");
       setTodayBookings((data?.bookings ?? []) as Booking[]);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load arrivals");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Failed to load arrivals"));
       setTodayBookings([]);
     } finally {
       setLoadingToday(false);
     }
-  }
+  }, []);
 
-  async function loadWeekArrivals() {
+  const loadWeekArrivals = useCallback(async () => {
     setLoadingWeek(true);
     try {
       // ✅ You need this endpoint in backend: GET /api/bookings/arrivals/week
@@ -96,69 +148,177 @@ export default function CheckInPage() {
     } finally {
       setLoadingWeek(false);
     }
-  }
+  }, []);
 
-  async function refreshAll() {
+  const refreshAll = useCallback(async () => {
     await Promise.all([loadTodayArrivals(), loadWeekArrivals()]);
+  }, [loadTodayArrivals, loadWeekArrivals]);
+
+  async function hydrateGuestFromMaster(bookingId: string, guestId: string, baseline: CheckInFormState) {
+    try {
+      const data = await apiFetch(`/api/guests/${encodeURIComponent(guestId)}`);
+      const g = data?.guest as
+        | {
+            fullName?: string | null;
+            email?: string | null;
+            phone?: string | null;
+            address?: string | null;
+            nationality?: string | null;
+            idType?: string | null;
+            idNumber?: string | null;
+            idIssuedBy?: string | null;
+            vehiclePlate?: string | null;
+          }
+        | undefined;
+      if (!g) return;
+      if (activeBookingIdRef.current !== bookingId) return;
+
+      const nextFromGuest: CheckInFormState = {
+        ...baseline,
+        guestName: g.fullName || baseline.guestName,
+        guestPhone: g.phone || baseline.guestPhone,
+        guestEmail: g.email || baseline.guestEmail,
+        address: g.address || baseline.address,
+        nationality: g.nationality || baseline.nationality,
+        idType: g.idType || baseline.idType,
+        idNumber: g.idNumber || baseline.idNumber,
+        idIssuedBy: g.idIssuedBy || baseline.idIssuedBy,
+        vehiclePlate: g.vehiclePlate || baseline.vehiclePlate,
+      };
+
+      setCheckInForm((prev) => ({
+        ...prev,
+        guestName: prev.guestName === baseline.guestName ? nextFromGuest.guestName : prev.guestName,
+        guestPhone: prev.guestPhone === baseline.guestPhone ? nextFromGuest.guestPhone : prev.guestPhone,
+        guestEmail: prev.guestEmail === baseline.guestEmail ? nextFromGuest.guestEmail : prev.guestEmail,
+        address: prev.address === baseline.address ? nextFromGuest.address : prev.address,
+        nationality: prev.nationality === baseline.nationality ? nextFromGuest.nationality : prev.nationality,
+        idType: prev.idType === baseline.idType ? nextFromGuest.idType : prev.idType,
+        idNumber: prev.idNumber === baseline.idNumber ? nextFromGuest.idNumber : prev.idNumber,
+        idIssuedBy: prev.idIssuedBy === baseline.idIssuedBy ? nextFromGuest.idIssuedBy : prev.idIssuedBy,
+        vehiclePlate: prev.vehiclePlate === baseline.vehiclePlate ? nextFromGuest.vehiclePlate : prev.vehiclePlate,
+      }));
+    } catch {
+      // fallback silently to snapshot values already in form
+    }
   }
 
   function openCheckInModal(b: Booking) {
+    activeBookingIdRef.current = b.id;
     setActiveBooking(b);
-    setCheckInForm({
-      guestName: b.guestName || "",
-      guestPhone: b.guestPhone || "",
-      guestEmail: b.guestEmail || "",
-      address: "",
-      nationality: "",
-      idType: "NIN",
-      idNumber: "",
-      idIssuedBy: "",
-      vehiclePlate: "",
+    const guestMaster = b.guest ?? null;
+    const baseline: CheckInFormState = {
+      guestName: guestMaster?.fullName || b.guestName || "",
+      guestPhone: guestMaster?.phone || b.guestPhone || "",
+      guestEmail: guestMaster?.email || b.guestEmail || "",
+      address: guestMaster?.address || b.guestAddress || "",
+      nationality: guestMaster?.nationality || b.guestNationality || "",
+      idType: guestMaster?.idType || b.idType || "NIN",
+      idNumber: guestMaster?.idNumber || b.idNumber || "",
+      idIssuedBy: guestMaster?.idIssuedBy || b.idIssuedBy || "",
+      vehiclePlate: guestMaster?.vehiclePlate || b.vehiclePlate || "",
       notes: "",
-    });
+    };
+    setCheckInForm(baseline);
     setCheckInOpen(true);
+    setGuestPhotoBlob(null);
+    setGuestPhotoSize(0);
+    setGuestPhotoPreview("");
+    setSubmitAttempted(false);
+    setUpdateGuestProfile(false);
+
+    const bookingGuestId = b.guestId || b.guest?.id;
+    if (bookingGuestId) {
+      void hydrateGuestFromMaster(b.id, bookingGuestId, baseline);
+    }
   }
 
   async function submitCheckIn() {
     if (!activeBooking) return;
+    setSubmitAttempted(true);
+    if (guestNameError || guestEmailError) {
+      setError("Please resolve check-in form errors.");
+      return;
+    }
 
     setError("");
     setBusyId(activeBooking.id);
 
     try {
+      // 1) Check-in
       await apiFetch(`/api/bookings/${activeBooking.id}/check-in`, {
         method: "POST",
         body: JSON.stringify({
-          notes: checkInForm.notes || null,
-
-          guestName: checkInForm.guestName || null,
-          guestPhone: checkInForm.guestPhone || null,
-          guestEmail: checkInForm.guestEmail || null,
-          address: checkInForm.address || null,
-          nationality: checkInForm.nationality || null,
-
-          idType: checkInForm.idType,
-          idNumber: checkInForm.idNumber || null,
-          idIssuedBy: checkInForm.idIssuedBy || null,
-
-          vehiclePlate: checkInForm.vehiclePlate || null,
+          notes: toNullableString(checkInForm.notes),
+          guestName: toNullableString(checkInForm.guestName),
+          guestPhone: toNullableString(checkInForm.guestPhone),
+          guestEmail: toNullableString(checkInForm.guestEmail),
+          address: toNullableString(checkInForm.address),
+          nationality: toNullableString(checkInForm.nationality),
+          idType: toNullableString(checkInForm.idType),
+          idNumber: toNullableString(checkInForm.idNumber),
+          idIssuedBy: toNullableString(checkInForm.idIssuedBy),
+          vehiclePlate: toNullableString(checkInForm.vehiclePlate),
+          updateGuestProfile: Boolean(updateGuestProfile && linkedGuestId),
         }),
       });
 
+      // 2) Upload photo (optional)
+      if (guestPhotoBlob) {
+        const fd = new FormData();
+        fd.append("file", guestPhotoBlob, `guest-${activeBooking.id}.jpg`);
+        await apiUpload(`/api/bookings/${activeBooking.id}/guest-photo`, fd);
+      }
+
       setCheckInOpen(false);
       setActiveBooking(null);
-
+      setSubmitAttempted(false);
       await refreshAll();
-    } catch (e: any) {
-      setError(e?.message || "Check-in failed");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Check-in failed"));
     } finally {
       setBusyId(null);
     }
   }
 
   useEffect(() => {
-    refreshAll();
-  }, []);
+    void refreshAll();
+  }, [refreshAll]);
+
+  useEffect(() => {
+    return () => {
+      if (guestPhotoPreview) URL.revokeObjectURL(guestPhotoPreview);
+    };
+  }, [guestPhotoPreview]);
+
+  async function handleGuestPhoto(file: File | null) {
+    if (!file) return;
+
+    setError("");
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file.");
+      return;
+    }
+
+    try {
+      const blob = await compressToMaxBytes(file, 300 * 1024);
+
+      setGuestPhotoBlob(blob);
+      setGuestPhotoSize(blob.size);
+
+      // preview
+      const url = URL.createObjectURL(blob);
+      if (guestPhotoPreview) URL.revokeObjectURL(guestPhotoPreview);
+      setGuestPhotoPreview(url);
+    } catch (e: unknown) {
+      setGuestPhotoBlob(null);
+      setGuestPhotoSize(0);
+      if (guestPhotoPreview) URL.revokeObjectURL(guestPhotoPreview);
+      setGuestPhotoPreview("");
+      setError(getErrorMessage(e, "Failed to process photo."));
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -385,13 +545,26 @@ export default function CheckInPage() {
       </Card>
 
       {/* CHECK-IN MODAL */}
-      <Dialog open={checkInOpen} onOpenChange={setCheckInOpen}>
-        <DialogContent className="sm:max-w-xl">
+      <Dialog
+        open={checkInOpen}
+        onOpenChange={(open) => {
+          setCheckInOpen(open);
+          if (!open) {
+            setSubmitAttempted(false);
+            setUpdateGuestProfile(false);
+            activeBookingIdRef.current = "";
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Check-in Guest</DialogTitle>
+            <DialogDescription>
+              Confirm stay details before check-in. Guest profile updates are optional.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5">
+          <div className="space-y-5 overflow-y-auto pr-1 max-h-[calc(90vh-120px)]">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Guest Name</Label>
@@ -399,6 +572,7 @@ export default function CheckInPage() {
                   value={checkInForm.guestName}
                   onChange={(e) => setCheckInForm((p) => ({ ...p, guestName: e.target.value }))}
                 />
+                {submitAttempted && guestNameError ? <p className="text-xs text-red-600">{guestNameError}</p> : null}
               </div>
               <div className="space-y-2">
                 <Label>Phone</Label>
@@ -416,11 +590,12 @@ export default function CheckInPage() {
                 value={checkInForm.guestEmail}
                 onChange={(e) => setCheckInForm((p) => ({ ...p, guestEmail: e.target.value }))}
               />
+              {submitAttempted && guestEmailError ? <p className="text-xs text-red-600">{guestEmailError}</p> : null}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Nationality</Label>
+                <Label>Nationality (optional)</Label>
                 <Input
                   value={checkInForm.nationality}
                   onChange={(e) => setCheckInForm((p) => ({ ...p, nationality: e.target.value }))}
@@ -436,7 +611,7 @@ export default function CheckInPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Address</Label>
+              <Label>Address (optional)</Label>
               <Input
                 value={checkInForm.address}
                 onChange={(e) => setCheckInForm((p) => ({ ...p, address: e.target.value }))}
@@ -480,6 +655,48 @@ export default function CheckInPage() {
               </div>
             </div>
 
+<div className="rounded-lg border border-slate-200 p-3 bg-slate-50 space-y-3">
+  <p className="text-sm font-semibold">Guest Photo</p>
+
+  <div className="flex items-start gap-3">
+    <div className="h-16 w-16 rounded-lg border bg-white overflow-hidden flex items-center justify-center shrink-0">
+      {guestPhotoPreview ? (
+        <img src={guestPhotoPreview} alt="Guest preview" className="h-full w-full object-cover" />
+      ) : (
+        <span className="text-xs text-muted-foreground">No photo</span>
+      )}
+    </div>
+
+    <div className="flex-1 space-y-2">
+      <input
+        type="file"
+        accept="image/*"
+        capture="user"
+        className="block w-full text-sm"
+        onChange={(e) => handleGuestPhoto(e.target.files?.[0] ?? null)}
+      />
+      <p className="text-[11px] text-muted-foreground">
+        Photo will be compressed to ≤ 300KB.
+        {guestPhotoSize ? ` Current: ${(guestPhotoSize / 1024).toFixed(0)}KB` : ""}
+      </p>
+
+      {guestPhotoPreview ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setGuestPhotoBlob(null);
+            setGuestPhotoPreview("");
+            setGuestPhotoSize(0);
+          }}
+          className="h-8 px-3 text-xs"
+        >
+          Remove Photo
+        </Button>
+      ) : null}
+    </div>
+  </div>
+</div>
             <div className="space-y-2">
               <Label>Notes (optional)</Label>
               <Input
@@ -489,11 +706,31 @@ export default function CheckInPage() {
               />
             </div>
 
-            <Button
-              onClick={submitCheckIn}
-              disabled={!activeBooking || busyId === activeBooking?.id}
-              className="w-full"
-            >
+            <div className="rounded-lg border border-slate-200 p-3 bg-slate-50">
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={updateGuestProfile}
+                  disabled={!linkedGuestId}
+                  onChange={(e) => setUpdateGuestProfile(e.target.checked)}
+                />
+                <span>
+                  Also update Guest profile with these details
+                  {!linkedGuestId ? (
+                    <span className="block text-xs text-muted-foreground mt-1">
+                      This booking is not linked to a Guest record, so profile update is unavailable.
+                    </span>
+                  ) : (
+                    <span className="block text-xs text-muted-foreground mt-1">
+                      If unchecked, only this stay record is updated.
+                    </span>
+                  )}
+                </span>
+              </label>
+            </div>
+
+            <Button onClick={submitCheckIn} disabled={!canSubmitCheckIn} className="w-full">
               {busyId === activeBooking?.id ? (
                 <>
                   <RefreshCcw className="mr-2 h-4 w-4 animate-spin" />

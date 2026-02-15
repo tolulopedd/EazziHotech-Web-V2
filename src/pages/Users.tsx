@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -42,6 +42,14 @@ type User = {
   updatedAt?: string;
 };
 
+type UsersResponse = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  users: User[];
+};
+
 export default function Users() {
   const nav = useNavigate();
   const myRole = (localStorage.getItem("userRole") || "STAFF").toUpperCase() as Role;
@@ -65,6 +73,10 @@ export default function Users() {
   // Data
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Create dialog
@@ -73,7 +85,7 @@ export default function Users() {
   const [createFullName, setCreateFullName] = useState("");
   const [createPhone, setCreatePhone] = useState("");
   const [createRole, setCreateRole] = useState<Role>(canCreateManager ? "MANAGER" : "STAFF");
-  const [createTempPassword, setCreateTempPassword] = useState("Welcome123!");
+  const [createTempPassword, setCreateTempPassword] = useState("");
   const [creating, setCreating] = useState(false);
 
   // Edit dialog
@@ -95,8 +107,13 @@ export default function Users() {
         // Only send status if your backend supports it; if not, remove the next 2 lines
         if (statusFilter !== "ALL") params.set("status", statusFilter);
 
-        const data = await apiFetch(`/api/users?${params.toString()}`);
-        setUsers(data.users || []);
+        params.set("page", String(page));
+        params.set("pageSize", String(pageSize));
+
+        const data = (await apiFetch(`/api/users?${params.toString()}`)) as UsersResponse;
+        setUsers(Array.isArray(data?.users) ? data.users : []);
+        setTotal(Number(data?.total ?? 0));
+        setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)));
       } catch (err: any) {
         toast.error(err?.message || "Failed to load users");
       } finally {
@@ -105,27 +122,7 @@ export default function Users() {
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
-
-  const filteredUsers = useMemo(() => {
-    // If your backend filters already, this is just a safety net (no harm).
-    return users.filter((u) => {
-      const s = search.trim().toLowerCase();
-      const matchesSearch =
-        !s ||
-        (u.email || "").toLowerCase().includes(s) ||
-        (u.fullName || "").toLowerCase().includes(s);
-
-      const matchesRole = roleFilter === "ALL" ? true : u.role === roleFilter;
-
-      const matchesStatus =
-        statusFilter === "ALL"
-          ? true
-          : (u.status ? u.status === statusFilter : true);
-
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [users, search, roleFilter, statusFilter]);
+  }, [refreshKey, page, pageSize]);
 
   function canManagerTouch(user: User) {
     // ADMIN can manage all; MANAGER can manage STAFF only
@@ -139,7 +136,7 @@ export default function Users() {
     setCreateFullName("");
     setCreatePhone("");
     setCreateRole(canCreateManager ? "MANAGER" : "STAFF");
-    setCreateTempPassword("Welcome123!");
+    setCreateTempPassword("");
     setCreateOpen(true);
   }
 
@@ -315,8 +312,8 @@ export default function Users() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All roles</SelectItem>
-                  <SelectItem value="ADMIN">ADMIN</SelectItem>
-                  <SelectItem value="MANAGER">MANAGER</SelectItem>
+                  {myRole === "ADMIN" ? <SelectItem value="ADMIN">ADMIN</SelectItem> : null}
+                  {myRole === "ADMIN" ? <SelectItem value="MANAGER">MANAGER</SelectItem> : null}
                   <SelectItem value="STAFF">STAFF</SelectItem>
                 </SelectContent>
               </Select>
@@ -339,7 +336,10 @@ export default function Users() {
           <div className="flex gap-2">
             <Button
               variant="secondary"
-              onClick={() => setRefreshKey((k) => k + 1)}
+              onClick={() => {
+                if (page === 1) setRefreshKey((k) => k + 1);
+                else setPage(1);
+              }}
               disabled={loading}
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
@@ -349,9 +349,10 @@ export default function Users() {
               variant="ghost"
               onClick={() => {
                 setSearch("");
-                setRoleFilter("ALL");
+                setRoleFilter(myRole === "MANAGER" ? "STAFF" : "ALL");
                 setStatusFilter("ALL");
-                setRefreshKey((k) => k + 1);
+                if (page === 1) setRefreshKey((k) => k + 1);
+                else setPage(1);
               }}
             >
               Clear
@@ -373,10 +374,10 @@ export default function Users() {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading users...
               </div>
-            ) : filteredUsers.length === 0 ? (
+            ) : users.length === 0 ? (
               <div className="p-6 text-muted-foreground">No users found.</div>
             ) : (
-              filteredUsers.map((u) => (
+              users.map((u) => (
                 <div key={u.id} className="grid grid-cols-12 px-4 py-3 border-t items-center">
                   <div className="col-span-4">
                     <div className="font-medium">{u.fullName || "—"}</div>
@@ -414,6 +415,44 @@ export default function Users() {
                 </div>
               ))
             )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <p className="text-sm text-muted-foreground">
+              Showing page {page} of {totalPages} • {total} total user{total === 1 ? "" : "s"}
+            </p>
+            <div className="flex items-center gap-2">
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => {
+                  const next = Number(v);
+                  setPageSize(Number.isFinite(next) ? next : 20);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[110px]">
+                  <SelectValue placeholder="Page size" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[10, 20, 30, 50, 100].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n} / page
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Button variant="outline" disabled={loading || page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                disabled={loading || page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -462,9 +501,15 @@ export default function Users() {
             </div>
 
             <div className="grid gap-2">
-              <Label>Temporary password</Label>
-              <Input value={createTempPassword} onChange={(e) => setCreateTempPassword(e.target.value)} />
-              <p className="text-xs text-muted-foreground">The user will receive an email with a link to reset their temporary password.</p>
+              <Label>Temporary password (optional)</Label>
+              <Input
+                value={createTempPassword}
+                onChange={(e) => setCreateTempPassword(e.target.value)}
+                placeholder="Leave empty to auto-generate secure temp password"
+              />
+              <p className="text-xs text-muted-foreground">
+                If left empty, system generates a temporary password and shows it once after create.
+              </p>
             </div>
           </div>
 

@@ -9,9 +9,11 @@ import {
   Settings,
   LogOut,
   Users,
-  ChevronsUpDown,
+  UserPlus,
   DoorOpen,
   DoorClosed,
+  BarChart3, // ✅ NEW
+  Inbox,
 } from "lucide-react";
 import logo from "@/assets/logo512.png";
 
@@ -24,19 +26,23 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const nav = useNavigate();
-  const tenantName = localStorage.getItem("tenantName") || "Workspace";
-  const tenantSlug = localStorage.getItem("tenantSlug") || "";
+  const isSuperAdmin = localStorage.getItem("isSuperAdmin") === "true";
 
   const items = [
     { label: "Dashboard", to: "/app/dashboard", icon: LayoutDashboard },
     { label: "Properties", to: "/app/properties", icon: Building2 },
+    { label: "Guests", to: "/app/guests", icon: UserPlus },
     { label: "Bookings", to: "/app/bookings", icon: CalendarCheck2 },
-        { label: "Payments", to: "/app/payments", icon: CreditCard },
-      { label: "Check In", to: "/app/check-in", icon: DoorOpen },
-  { label: "Check Out", to: "/app/check-out", icon: DoorClosed },
+    { label: "Payments", to: "/app/payments", icon: CreditCard },
+    { label: "Check In", to: "/app/check-in", icon: DoorOpen },
+    { label: "Check Out", to: "/app/check-out", icon: DoorClosed },
+
+    // ✅ NEW: Reports module
+    { label: "Reports", to: "/app/reports", icon: BarChart3 },
+    ...(isSuperAdmin ? [{ label: "Leads", to: "/app/leads", icon: Inbox }] : []),
+
     { label: "Settings", to: "/app/settings", icon: Settings },
     { label: "Users Management", to: "/app/users", icon: Users },
-
   ];
 
   function logout() {
@@ -50,16 +56,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       {/* Brand / Workspace */}
       <div className="px-4 pt-6 pb-3">
         <div className="flex items-center gap-3">
-         <div className="h-10 w-10 rounded-3xl ring-1 ring-indigo-400 overflow-hidden bg-white">
-  <img
-    src={logo}
-    alt="EazziHotech logo"
-    className="h-full w-full object-contain"
-  />
-</div>
+          <div className="h-10 w-10 rounded-3xl ring-1 ring-indigo-400 overflow-hidden bg-white">
+            <img src={logo} alt="EazziHotech logo" className="h-full w-full object-contain" />
+          </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold tracking-tight text-indigo-700">EazziHotech</div>
-            
           </div>
         </div>
       </div>
@@ -86,13 +87,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   )
                 }
               >
-                <Icon
-                  className={cx(
-                    "h-4 w-4 transition",
-                    "group-hover:opacity-100",
-                    "opacity-80"
-                  )}
-                />
+                <Icon className={cx("h-4 w-4 transition", "group-hover:opacity-100", "opacity-80")} />
                 <span className="font-medium">{it.label}</span>
               </NavLink>
             );

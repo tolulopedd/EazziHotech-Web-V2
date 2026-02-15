@@ -682,15 +682,15 @@ function PropertyCard({
           <div className="grid grid-cols-3 gap-3">
             <div className="p-3 bg-indigo-50 rounded-lg">
               <p className="text-xs text-muted-foreground">Units</p>
-              <p className="text-lg font-bold text-indigo-600">{property.unitCount || 0}</p>
+              <p className="text-lg font-bold text-indigo-600">{property.unitCount ?? property.totalUnits ?? 0}</p>
             </div>
             <div className="p-3 bg-green-50 rounded-lg">
               <p className="text-xs text-muted-foreground">Occupancy</p>
-              <p className="text-lg font-bold text-green-600">{property.occupancy || 0}%</p>
+              <p className="text-lg font-bold text-green-600">{property.occupancy ?? 0}%</p>
             </div>
             <div className="p-3 bg-blue-50 rounded-lg">
               <p className="text-xs text-muted-foreground">Monthly</p>
-              <p className="text-lg font-bold text-blue-600">₦{property.monthlyRevenue || 0}</p>
+              <p className="text-lg font-bold text-blue-600">₦{formatNaira(property.monthlyRevenue ?? 0)}</p>
             </div>
           </div>
           <button

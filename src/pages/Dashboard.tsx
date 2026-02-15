@@ -7,7 +7,8 @@ import {
   CalendarCheck2,
   CreditCard,
   Users,
-  Settings,  TrendingUp,
+  Settings,
+  TrendingUp,
   AlertCircle,
   ArrowRight,
   CheckCircle2,
@@ -21,7 +22,7 @@ interface DashboardStats {
   totalProperties: number;
   totalUnits: number;
   activeBookings: number;
-  pendingPayments: number;
+  pendingPayments: number; // NOTE: from /api/dashboard (payment records), not outstanding bookings
   totalRevenue: number;
   occupancyRate: number;
 }
@@ -53,37 +54,69 @@ interface DashboardData {
   staffCount?: number;
 }
 
+/** Matches /api/payments/pending response shape used in Payments.tsx */
+type OutstandingItem = {
+  bookingId: string;
+  guestName: string | null;
+  unitName?: string | null;
+  bookingStatus: string;
+  paymentStatus: string; // UNPAID | PARTPAID
+  totalAmount: string;
+  paidTotal: string;
+  outstanding: string;
+  currency: string;
+};
+
+type OutstandingResponse = { items: OutstandingItem[] };
+
+/** ✅ Reuse this everywhere you display NGN amounts */
+const formatNGN = (value: number) =>
+  `₦${new Intl.NumberFormat("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)}`;
+
 export default function Dashboard() {
   const nav = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
+  // ✅ NEW: outstanding bookings count (same as Payments.tsx "Pending (Outstanding)")
+  const [outstandingCount, setOutstandingCount] = useState<number>(0);
+
   useEffect(() => {
     let alive = true;
 
-    async function fetchDashboard() {
+    async function fetchAll() {
       try {
         setLoading(true);
         setErrMsg(null);
 
-        const result = await apiFetch("/api/dashboard");
+        // Fetch dashboard + outstanding in parallel
+        const [dash, outstanding] = await Promise.all([
+          apiFetch("/api/dashboard") as Promise<DashboardData>,
+          apiFetch("/api/payments/pending") as Promise<OutstandingResponse>,
+        ]);
+
         if (!alive) return;
 
-        setData(result);
+        setData(dash);
+        setOutstandingCount((outstanding?.items ?? []).length);
       } catch (err: any) {
         console.error("Failed to load dashboard:", err);
         if (!alive) return;
 
         setErrMsg(err?.message || "Failed to load dashboard");
         setData(null);
+        setOutstandingCount(0);
       } finally {
         if (!alive) return;
         setLoading(false);
       }
     }
 
-    fetchDashboard();
+    fetchAll();
     return () => {
       alive = false;
     };
@@ -121,58 +154,74 @@ export default function Dashboard() {
   const isManager = data.userRole === "manager";
   const isStaff = data.userRole === "staff";
 
+  // Occupancy coloring: Green >= 70, Amber 30-69.9, Red < 30
+  const occupancyVariant: StatCardProps["variant"] =
+    data.stats.occupancyRate >= 60
+      ? "success"
+      : data.stats.occupancyRate >= 30
+      ? "warning"
+      : "danger";
+
+  // ✅ This is the value you WANT on the dashboard (same concept as Payments.tsx pending tab)
+  const pendingPaymentsCount = outstandingCount;
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground mt-2">
-          {isAdmin && "Welcome back! Here's your full workspace overview."}
-          {isManager && "Welcome back! Here's your tenant performance overview."}
-          {isStaff && "Welcome back! Here are bookings and payments to monitor."}
+          {isAdmin && "Welcome back! Here’s an overview of your entire workspace."}
+          {isManager && "Welcome back! Here’s an overview of your tenant’s performance."}
+          {isStaff && "Welcome back! Here are the bookings and payments to monitor today."}
         </p>
       </div>
 
-      {/* Stats Grid (ADMIN + MANAGER only) */}
-      {!isStaff && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        {!isStaff && (
           <StatCard
             label="Properties"
             value={data.stats.totalProperties}
             icon={Building2}
             onClick={() => nav("/app/properties")}
           />
-          <StatCard
-            label="Units"
-            value={data.stats.totalUnits}
-            icon={Building2}
-            variant="secondary"
-            onClick={() => nav("/app/properties")}
-          />
-          <StatCard
-            label="Active Bookings"
-            value={data.stats.activeBookings}
-            icon={CalendarCheck2}
-            onClick={() => nav("/app/bookings")}
-          />
-          <StatCard
-            label="Pending Payments"
-            value={data.stats.pendingPayments}
-            icon={CreditCard}
-            variant="warning"
-            onClick={() => nav("/app/payments")}
-          />
-          <StatCard
-            label="Occupancy"
-            value={`${data.stats.occupancyRate}%`}
-            icon={TrendingUp}
-            variant="success"
-          />
-        </div>
-      )}
+        )}
 
-      {/* Admin/Manager cards */}
-      {!isStaff && (
+        <StatCard
+          label="Units"
+          value={data.stats.totalUnits}
+          icon={Building2}
+          variant="secondary"
+          onClick={!isStaff ? () => nav("/app/properties") : undefined}
+        />
+
+        <StatCard
+          label="Active Bookings"
+          value={data.stats.activeBookings}
+          icon={CalendarCheck2}
+          onClick={() => nav("/app/bookings")}
+        />
+
+        {/* Pending Payments = Outstanding bookings (same as Payments.tsx tab) */}
+        <StatCard
+          label="Pending Payments"
+          value={pendingPaymentsCount}
+          icon={CreditCard}
+          variant={pendingPaymentsCount > 0 ? "warning" : "secondary"}
+          onClick={() => nav("/app/payments")}
+        />
+
+        <StatCard
+          label="Occupancy"
+          value={`${data.stats.occupancyRate}%`}
+          icon={TrendingUp}
+          variant={occupancyVariant}
+        />
+      </div>
+
+      {/* Admin-only cards */}
+      {isAdmin && (
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
@@ -201,9 +250,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
-                  <p className="text-3xl font-bold">
-                    ₦{(data.stats.totalRevenue / 1000).toFixed(1)}k
-                  </p>
+                  <p className="text-3xl font-bold">{formatNGN(data.stats.totalRevenue)}</p>
                   <p className="text-sm text-muted-foreground">Total revenue</p>
                 </div>
 
@@ -240,7 +287,7 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Pending Payments */}
+      {/* Pending Payments (this section is still based on /api/dashboard pendingPayments list of Payment rows) */}
       {data.pendingPayments.length > 0 && (
         <Card className="border-orange-200 bg-orange-50/50">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -276,10 +323,10 @@ export default function Dashboard() {
             {!isStaff && (
               <ActionButton label="Properties" onClick={() => nav("/app/properties")} icon={Building2} />
             )}
-            {(isAdmin || isManager) && (
+            {isAdmin && (
               <ActionButton label="Settings" onClick={() => nav("/app/settings")} icon={Settings} />
             )}
-                        {(isAdmin || isManager) && (
+            {isAdmin && (
               <ActionButton label="Users" onClick={() => nav("/app/users")} icon={Users} />
             )}
           </div>
@@ -294,7 +341,7 @@ interface StatCardProps {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
-  variant?: "default" | "secondary" | "warning" | "success";
+  variant?: "default" | "secondary" | "warning" | "success" | "danger";
   onClick?: () => void;
 }
 
@@ -305,6 +352,7 @@ function StatCard({ label, value, icon: Icon, variant = "default", onClick }: St
     secondary: "bg-slate-50 border-slate-100 hover:border-slate-300",
     warning: "bg-orange-50 border-orange-100 hover:border-orange-300",
     success: "bg-green-50 border-green-100 hover:border-green-300",
+    danger: "bg-red-50 border-red-100 hover:border-red-300",
   }[variant];
 
   return (
@@ -319,10 +367,12 @@ function StatCard({ label, value, icon: Icon, variant = "default", onClick }: St
             variant === "warning"
               ? "text-orange-600"
               : variant === "success"
-                ? "text-green-600"
-                : variant === "secondary"
-                  ? "text-slate-600"
-                  : "text-indigo-600"
+              ? "text-green-600"
+              : variant === "danger"
+              ? "text-red-600"
+              : variant === "secondary"
+              ? "text-slate-600"
+              : "text-indigo-600"
           }`}
         />
       </div>
@@ -350,9 +400,10 @@ function BookingItem({ booking }: { booking: RecentBooking }) {
       </div>
 
       <div className="text-right mr-4">
-        <p className="font-medium">₦{booking.amount}</p>
+        <p className="font-medium">{formatNGN(booking.amount)}</p>
         <p className="text-xs text-muted-foreground">
-          {new Date(booking.checkIn).toLocaleDateString()} - {new Date(booking.checkOut).toLocaleDateString()}
+          {new Date(booking.checkIn).toLocaleDateString()} -{" "}
+          {new Date(booking.checkOut).toLocaleDateString()}
         </p>
       </div>
 
@@ -383,7 +434,7 @@ function PaymentItem({ payment }: { payment: PendingPayment }) {
       </div>
 
       <div className="text-right">
-        <p className="font-medium">₦{payment.amount}</p>
+        <p className="font-medium">{formatNGN(payment.amount)}</p>
         <p className={`text-xs ${isOverdue ? "text-red-600" : "text-muted-foreground"}`}>
           {new Date(payment.dueDate).toLocaleDateString()}
         </p>

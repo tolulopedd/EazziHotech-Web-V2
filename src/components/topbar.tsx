@@ -10,11 +10,54 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 import { Sidebar } from "@/components/sidebar";
-import { clearAuthSession } from "@/lib/api";
+import { apiFetch, clearAuthSession } from "@/lib/api";
+
+type TenantSubscriptionSnapshot = {
+  subscriptionStatus?: string;
+  currentPeriodEndAt?: string | null;
+  daysToExpiry?: number | null;
+};
+
+function buildSubscriptionNotice(input: TenantSubscriptionSnapshot | null) {
+  if (!input) return null;
+  const status = String(input.subscriptionStatus || "ACTIVE").toUpperCase();
+  const days = typeof input.daysToExpiry === "number" ? input.daysToExpiry : null;
+  const endAt = input.currentPeriodEndAt ? new Date(input.currentPeriodEndAt) : null;
+  const endLabel = endAt && !Number.isNaN(endAt.getTime()) ? endAt.toLocaleDateString() : null;
+
+  if (status === "SUSPENDED") {
+    return {
+      tone: "red" as const,
+      text: "Subscription suspended. Renew to regain access.",
+    };
+  }
+
+  if (status === "GRACE") {
+    return {
+      tone: "red" as const,
+      text: endLabel
+        ? `Subscription in grace period. Service may pause soon (period ended ${endLabel}).`
+        : "Subscription in grace period. Service may pause soon.",
+    };
+  }
+
+  if (days !== null && days >= 0 && days <= 3) {
+    return {
+      tone: "amber" as const,
+      text: `Subscription expires in ${days} day${days === 1 ? "" : "s"}. Renew to avoid interruption.`,
+    };
+  }
+
+  return null;
+}
 
 export function Topbar({ onMenu }: { onMenu?: () => void })  {
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
+  const [subscriptionNotice, setSubscriptionNotice] = useState<{
+    tone: "amber" | "red";
+    text: string;
+  } | null>(null);
 
   const tenantName = localStorage.getItem("tenantName") || "Workspace";
   const tenantSlug = localStorage.getItem("tenantSlug") || "";
@@ -37,6 +80,11 @@ export function Topbar({ onMenu }: { onMenu?: () => void })  {
     localStorage.removeItem("userName");
     localStorage.removeItem("userRole");
     localStorage.removeItem("userId");
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("isSuperAdmin");
+    localStorage.removeItem("subscriptionStatus");
+    localStorage.removeItem("subscriptionCurrentPeriodEndAt");
+    localStorage.removeItem("subscriptionDaysToExpiry");
 
     toast.success("Logged out");
     nav("/login");
@@ -65,6 +113,47 @@ useEffect(() => {
 
   return () => clearInterval(timer);
 }, []);
+
+  useEffect(() => {
+    const localSnapshot: TenantSubscriptionSnapshot = {
+      subscriptionStatus: localStorage.getItem("subscriptionStatus") || undefined,
+      currentPeriodEndAt: localStorage.getItem("subscriptionCurrentPeriodEndAt"),
+      daysToExpiry: localStorage.getItem("subscriptionDaysToExpiry")
+        ? Number(localStorage.getItem("subscriptionDaysToExpiry"))
+        : null,
+    };
+    setSubscriptionNotice(buildSubscriptionNotice(localSnapshot));
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiFetch("/api/tenant");
+        const tenant = data?.tenant || {};
+        const snapshot: TenantSubscriptionSnapshot = {
+          subscriptionStatus: tenant.subscriptionStatus,
+          currentPeriodEndAt: tenant.currentPeriodEndAt,
+          daysToExpiry: tenant.daysToExpiry,
+        };
+
+        localStorage.setItem("subscriptionStatus", snapshot.subscriptionStatus || "ACTIVE");
+        localStorage.setItem("subscriptionCurrentPeriodEndAt", snapshot.currentPeriodEndAt || "");
+        localStorage.setItem(
+          "subscriptionDaysToExpiry",
+          snapshot.daysToExpiry != null ? String(snapshot.daysToExpiry) : ""
+        );
+
+        if (!cancelled) {
+          setSubscriptionNotice(buildSubscriptionNotice(snapshot));
+        }
+      } catch {
+        // silent
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
 
   return (
@@ -152,6 +241,17 @@ useEffect(() => {
           </Button>
         </div>
       </div>
+      {subscriptionNotice ? (
+        <div
+          className={
+            subscriptionNotice.tone === "red"
+              ? "border-t border-red-200 bg-red-50 px-4 md:px-6 py-2 text-sm text-red-700"
+              : "border-t border-amber-200 bg-amber-50 px-4 md:px-6 py-2 text-sm text-amber-700"
+          }
+        >
+          {subscriptionNotice.text}
+        </div>
+      ) : null}
     </header>
   );
 }

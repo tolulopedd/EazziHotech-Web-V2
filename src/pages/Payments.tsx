@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
 type PaymentStatus = "PENDING" | "CONFIRMED" | "FAILED" | "REFUNDED" | string;
@@ -61,6 +61,9 @@ type PendingItem = {
   currency: string;    // "NGN"
 };
 
+type CollectField = "amount" | "reference";
+type CollectErrors = Partial<Record<CollectField, string>>;
+
 function formatDate(value?: string | null) {
   if (!value) return "—";
   const d = new Date(value);
@@ -108,6 +111,14 @@ function toNumberSafe(v: string) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+function getErrorMessage(e: unknown, fallback: string) {
+  if (e && typeof e === "object" && "message" in e) {
+    const msg = (e as { message?: unknown }).message;
+    if (typeof msg === "string" && msg.trim()) return msg;
+  }
+  return fallback;
+}
+
 export default function Payments() {
   const [tab, setTab] = useState<"PENDING" | "CONFIRMED">("PENDING");
   const [loading, setLoading] = useState(true);
@@ -124,12 +135,45 @@ export default function Payments() {
   const [collectOpen, setCollectOpen] = useState(false);
   const [selectedPending, setSelectedPending] = useState<PendingItem | null>(null);
   const [collecting, setCollecting] = useState(false);
+  const [collectSubmitAttempted, setCollectSubmitAttempted] = useState(false);
+  const [collectTouched, setCollectTouched] = useState<Record<CollectField, boolean>>({
+    amount: false,
+    reference: false,
+  });
   const [collectForm, setCollectForm] = useState({
     amount: "",
     currency: "NGN",
     reference: "",
     notes: "",
   });
+
+  const selectedOutstandingNum = useMemo(() => {
+    if (!selectedPending) return NaN;
+    return toNumberSafe(String(selectedPending.outstanding ?? ""));
+  }, [selectedPending]);
+
+  const collectErrors = useMemo<CollectErrors>(() => {
+    const next: CollectErrors = {};
+    const amt = toMoneyString(collectForm.amount);
+    const amtNum = toNumberSafe(amt);
+    const ref = collectForm.reference.trim();
+
+    if (!amt || !Number.isFinite(amtNum) || amtNum <= 0) {
+      next.amount = "Enter a valid amount greater than 0.";
+    } else if (Number.isFinite(selectedOutstandingNum) && amtNum > selectedOutstandingNum + 0.009) {
+      next.amount = "Amount cannot exceed outstanding balance.";
+    }
+
+    if (!ref) {
+      next.reference = "Reference is required.";
+    }
+
+    return next;
+  }, [collectForm.amount, collectForm.reference, selectedOutstandingNum]);
+
+  const isCollectFormValid = Object.keys(collectErrors).length === 0;
+  const showCollectError = (field: CollectField) =>
+    Boolean(collectErrors[field]) && (collectSubmitAttempted || collectTouched[field]);
 
   useEffect(() => {
     fetchData();
@@ -149,8 +193,8 @@ export default function Payments() {
         const data = await apiFetch(`/api/payments/pending`);
         setPending(data.items || []);
       }
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to load payments");
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, "Failed to load payments"));
     } finally {
       setLoading(false);
     }
@@ -187,6 +231,8 @@ export default function Payments() {
 
   function openCollect(item: PendingItem) {
     setSelectedPending(item);
+    setCollectSubmitAttempted(false);
+    setCollectTouched({ amount: false, reference: false });
     setCollectForm({
       amount: item.outstanding || "",
       currency: item.currency || "NGN",
@@ -198,18 +244,12 @@ export default function Payments() {
 
   async function doCollect() {
     if (!selectedPending) return;
-
+    setCollectSubmitAttempted(true);
+    if (!isCollectFormValid) {
+      toast.error("Please resolve payment form errors.");
+      return;
+    }
     const amt = toMoneyString(collectForm.amount);
-    const amtNum = toNumberSafe(amt);
-
-    if (!amt || !Number.isFinite(amtNum) || amtNum <= 0) {
-      toast.error("Enter a valid amount greater than 0.");
-      return;
-    }
-    if (!collectForm.reference.trim()) {
-      toast.error("Reference is required");
-      return;
-    }
 
     try {
       setCollecting(true);
@@ -231,8 +271,8 @@ export default function Payments() {
 
       // refresh the active tab data
       await fetchData();
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to record payment");
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, "Failed to record payment"));
     } finally {
       setCollecting(false);
     }
@@ -258,12 +298,12 @@ export default function Payments() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
           <p className="text-muted-foreground mt-2">
-            Pending = bookings with outstanding balance. Confirmed = all confirmed payment records.
+            Pending = bookings with balance due. Confirmed = all confirmed payment records.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={fetchData}>
+          <Button variant="outline" onClick={fetchData} disabled={loading}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
@@ -275,19 +315,21 @@ export default function Payments() {
         <div className="flex gap-2 border-b border-slate-200">
           <button
             onClick={() => setTab("PENDING")}
+            disabled={loading}
             className={cn(
-              "px-4 py-2 font-medium border-b-2 transition",
+              "px-4 py-2 font-medium border-b-2 transition disabled:opacity-50",
               tab === "PENDING"
                 ? "border-indigo-600 text-indigo-600"
                 : "border-transparent text-muted-foreground hover:text-slate-900"
             )}
           >
-            Pending (Outstanding)
+            Pending (Balance Due)
           </button>
           <button
             onClick={() => setTab("CONFIRMED")}
+            disabled={loading}
             className={cn(
-              "px-4 py-2 font-medium border-b-2 transition",
+              "px-4 py-2 font-medium border-b-2 transition disabled:opacity-50",
               tab === "CONFIRMED"
                 ? "border-indigo-600 text-indigo-600"
                 : "border-transparent text-muted-foreground hover:text-slate-900"
@@ -313,7 +355,11 @@ export default function Payments() {
         <Card>
           <CardContent className="p-8 text-center">
             <p className="text-muted-foreground">
-              {tab === "PENDING" ? "No outstanding balances." : "No confirmed payments found."}
+              {query.trim()
+                ? "No payment records match your search."
+                : tab === "PENDING"
+                ? "No balances due."
+                : "No confirmed payments found."}
             </p>
           </CardContent>
         </Card>
@@ -325,7 +371,7 @@ export default function Payments() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-lg truncate">
-                      Outstanding: {formatMoney(x.outstanding, x.currency)}
+                      Balance Due: {formatMoney(x.outstanding, x.currency)}
                     </CardTitle>
 
                     <p className="text-sm text-muted-foreground mt-1">
@@ -420,10 +466,22 @@ export default function Payments() {
       )}
 
       {/* Collect dialog */}
-      <Dialog open={collectOpen} onOpenChange={setCollectOpen}>
+      <Dialog
+        open={collectOpen}
+        onOpenChange={(open) => {
+          setCollectOpen(open);
+          if (!open) {
+            setCollectSubmitAttempted(false);
+            setCollectTouched({ amount: false, reference: false });
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Collect Payment</DialogTitle>
+            <DialogDescription>
+              Record received payment for this booking. Amount must not exceed balance due.
+            </DialogDescription>
           </DialogHeader>
 
           {selectedPending ? (
@@ -431,7 +489,7 @@ export default function Payments() {
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="text-sm">
                   <div className="font-medium">
-                    Outstanding: {formatMoney(selectedPending.outstanding, selectedPending.currency)}
+                    Balance Due: {formatMoney(selectedPending.outstanding, selectedPending.currency)}
                   </div>
                   <div className="text-muted-foreground mt-1">
                     Total: {formatMoney(selectedPending.totalAmount, selectedPending.currency)} • Paid:{" "}
@@ -448,17 +506,29 @@ export default function Payments() {
                 <Input
                   inputMode="decimal"
                   value={collectForm.amount}
-                  onChange={(e) => setCollectForm((s) => ({ ...s, amount: toMoneyString(e.target.value) }))}
+                  onChange={(e) => {
+                    setCollectTouched((s) => ({ ...s, amount: true }));
+                    setCollectForm((s) => ({ ...s, amount: toMoneyString(e.target.value) }));
+                  }}
                 />
+                {showCollectError("amount") ? (
+                  <p className="text-xs text-red-600">{collectErrors.amount}</p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
                 <Label>Reference</Label>
                 <Input
                   value={collectForm.reference}
-                  onChange={(e) => setCollectForm((s) => ({ ...s, reference: e.target.value }))}
+                  onChange={(e) => {
+                    setCollectTouched((s) => ({ ...s, reference: true }));
+                    setCollectForm((s) => ({ ...s, reference: e.target.value }));
+                  }}
                   placeholder="Cash / Transfer Ref..."
                 />
+                {showCollectError("reference") ? (
+                  <p className="text-xs text-red-600">{collectErrors.reference}</p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -476,7 +546,7 @@ export default function Payments() {
                 <Button variant="outline" onClick={() => setCollectOpen(false)} disabled={collecting}>
                   Cancel
                 </Button>
-                <Button onClick={doCollect} disabled={collecting}>
+                <Button onClick={doCollect} disabled={collecting || !isCollectFormValid}>
                   {collecting ? "Recording..." : "Record Payment"}
                 </Button>
               </div>

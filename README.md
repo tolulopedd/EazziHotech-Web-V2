@@ -2,6 +2,12 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## App Environment Variables
+
+- `VITE_API_BASE_URL`: API base URL. Default: `http://localhost:4000`
+- `VITE_LOGIN_MAX_FAILED_ATTEMPTS`: Max invalid login attempts before temporary lock. Default: `5`
+- `VITE_LOGIN_LOCKOUT_SECONDS`: Temporary login lock duration in seconds. Default: `30`
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh

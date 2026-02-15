@@ -41,6 +41,7 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => {
+  const ariaDescribedBy = props["aria-describedby"];
   const container =
     typeof document !== "undefined"
       ? document.getElementById("dialog-scope")
@@ -57,6 +58,7 @@ const DialogContent = React.forwardRef<
           "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className
         )}
+        aria-describedby={ariaDescribedBy ?? undefined}
         {...props}
       >
         {children}

@@ -11,6 +11,16 @@ import { apiFetch, publicFetch, setAuthSession } from "@/lib/api";
 
 type Tenant = { id: string; name: string; slug: string };
 
+function readPositiveIntEnv(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const intVal = Math.floor(parsed);
+  return intVal > 0 ? intVal : fallback;
+}
+
+const MAX_FAILED_ATTEMPTS = readPositiveIntEnv(import.meta.env.VITE_LOGIN_MAX_FAILED_ATTEMPTS, 5);
+const LOCKOUT_SECONDS = readPositiveIntEnv(import.meta.env.VITE_LOGIN_LOCKOUT_SECONDS, 30);
+
 export default function Login() {
   const nav = useNavigate();
 
@@ -25,9 +35,16 @@ export default function Login() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Login creds
-  const [email, setEmail] = useState("admin@demo.com");
-  const [password, setPassword] = useState("Password123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockUntilMs, setLockUntilMs] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  const lockRemainingSec = lockUntilMs ? Math.max(0, Math.ceil((lockUntilMs - nowMs) / 1000)) : 0;
+  const isTemporarilyLocked = lockRemainingSec > 0;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -40,6 +57,17 @@ export default function Login() {
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (lockUntilMs && lockRemainingSec === 0) {
+      setLockUntilMs(null);
+    }
+  }, [lockRemainingSec, lockUntilMs]);
 
   // Load previously selected tenant (if any)
   useEffect(() => {
@@ -99,6 +127,11 @@ export default function Login() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
+    if (isTemporarilyLocked) {
+      toast.error(`Too many failed attempts. Try again in ${lockRemainingSec}s.`);
+      return;
+    }
+
     if (!selectedTenant?.id) {
       toast.error("Please select your workspace first.");
       return;
@@ -125,7 +158,9 @@ export default function Login() {
       if (!accessToken) throw new Error("Login response missing accessToken");
       if (!tenantId) throw new Error("Login response missing tenantId");
 
-      setAuthSession({ tenantId, accessToken, refreshToken });
+	      setAuthSession({ tenantId, accessToken, refreshToken });
+	      setFailedAttempts(0);
+	      setLockUntilMs(null);
 
       // Store user info for topbar (support both shapes)
       const userName = data?.user?.fullName || data?.user?.name || data?.user?.email || email;
@@ -134,12 +169,69 @@ export default function Login() {
       localStorage.setItem("userName", userName);
       localStorage.setItem("userRole", userRole);
       localStorage.setItem("userId", data?.user?.id || "");
+      localStorage.setItem("userEmail", data?.user?.email || email);
+      localStorage.setItem("isSuperAdmin", data?.isSuperAdmin ? "true" : "false");
+      if (data?.subscription) {
+        localStorage.setItem("subscriptionStatus", data.subscription.status || "ACTIVE");
+        localStorage.setItem(
+          "subscriptionCurrentPeriodEndAt",
+          data.subscription.currentPeriodEndAt || ""
+        );
+        localStorage.setItem(
+          "subscriptionDaysToExpiry",
+          data.subscription.daysToExpiry != null ? String(data.subscription.daysToExpiry) : ""
+        );
+        if (data.subscription.expiringSoon) {
+          const d = Number(data.subscription.daysToExpiry ?? 0);
+          toast(`Subscription expires in ${d} day${d === 1 ? "" : "s"}.`);
+        }
+      } else {
+        localStorage.removeItem("subscriptionStatus");
+        localStorage.removeItem("subscriptionCurrentPeriodEndAt");
+        localStorage.removeItem("subscriptionDaysToExpiry");
+      }
 
       toast.success("Logged in");
       nav("/app/dashboard");
-    } catch (err) {
+    } catch (err: any) {
+      const code = err?.code || err?.data?.code || err?.data?.error?.code;
+      const details = err?.data?.error?.details || err?.data?.details;
       const msg =
-        err instanceof Error ? err.message : (err as any)?.message || "Login failed";
+        err instanceof Error ? err.message : err?.message || "Login failed";
+
+      if (code === "TENANT_SUSPENDED") {
+        const until = details?.currentPeriodEndAt
+          ? new Date(details.currentPeriodEndAt).toLocaleDateString()
+          : null;
+        toast.error(
+          until
+            ? `Subscription inactive since ${until}. Renew subscription to continue.`
+            : "Subscription suspended. Renew subscription to continue."
+        );
+        return;
+      }
+      if (code === "SUPERADMIN_REQUIRED") {
+        toast.error("Only platform super admin can change subscription access.");
+        return;
+      }
+
+      const invalidCredentials =
+        code === "INVALID_CREDENTIALS" || /invalid email or password/i.test(msg);
+      if (invalidCredentials) {
+        const nextFailures = failedAttempts + 1;
+        if (nextFailures >= MAX_FAILED_ATTEMPTS) {
+          setFailedAttempts(0);
+          setLockUntilMs(Date.now() + LOCKOUT_SECONDS * 1000);
+          toast.error(`Too many failed attempts. Login locked for ${LOCKOUT_SECONDS} seconds.`);
+          return;
+        }
+        setFailedAttempts(nextFailures);
+        toast.error(
+          `Invalid email or password. ${MAX_FAILED_ATTEMPTS - nextFailures} attempt(s) remaining before temporary lock.`
+        );
+        return;
+      }
+
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -167,7 +259,7 @@ export default function Login() {
           </CardHeader>
 
           <CardContent>
-            <form onSubmit={onSubmit} className="space-y-4">
+            <form onSubmit={onSubmit} className="space-y-4" autoComplete="on">
               {/* Workspace selector */}
               <div className="space-y-2 relative" ref={menuRef}>
                 <Label>Workspace</Label>
@@ -186,6 +278,7 @@ export default function Login() {
                   }}
                   onFocus={() => setMenuOpen(true)}
                   autoComplete="off"
+                  disabled={isTemporarilyLocked}
                 />
 
                 <div className="absolute left-0 right-0 mt-1 z-50">
@@ -240,10 +333,17 @@ export default function Login() {
                 <Input
                   className="border border-indigo-300 focus:border-indigo-500 focus:ring-indigo-600"
                   id="email"
-                  placeholder="admin@hotel.com"
+                  name="username"
+                  type="email"
+                  placeholder="name@yourcompany.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
+                  autoComplete="username"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  disabled={isTemporarilyLocked}
                 />
               </div>
 
@@ -260,23 +360,41 @@ export default function Login() {
                   </button>
                 </div>
 
-                <Input
-                  className="border border-indigo-300 focus:border-indigo-500 focus:ring-indigo-600"
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
+                <div className="relative">
+                  <Input
+                    className="border border-indigo-300 focus:border-indigo-500 focus:ring-indigo-600 pr-20"
+                    id="password"
+                    name="current-password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    disabled={isTemporarilyLocked}
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:underline"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
               </div>
+
+              {isTemporarilyLocked ? (
+                <div className="text-xs text-red-600 text-center">
+                  Too many failed attempts. Try again in {lockRemainingSec}s.
+                </div>
+              ) : null}
 
               <Button
                 className="w-full bg-indigo-700 hover:bg-indigo-800 text-white"
-                disabled={loading}
+                disabled={loading || isTemporarilyLocked}
                 type="submit"
               >
-                {loading ? "Signing in..." : "Sign in"}
+                {loading ? "Signing in..." : isTemporarilyLocked ? `Try again in ${lockRemainingSec}s` : "Sign in"}
               </Button>
 
               <div className="text-xs text-muted-foreground text-center">

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { publicFetch, apiFetch } from "@/lib/api";
+import { publicFetch } from "@/lib/api";
 
 type Tenant = { id: string; name: string; slug: string };
 
@@ -50,7 +50,7 @@ export default function ForgotPassword() {
     if (!email) return toast.error("Email is required");
     setLoading(true);
     try {
-      await apiFetch("/api/auth/forgot-password", {
+      await publicFetch("/api/auth/forgot-password", {
         method: "POST",
         body: JSON.stringify({
           tenantSlug: selectedTenant?.slug,
@@ -116,7 +116,15 @@ export default function ForgotPassword() {
 
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+                <Input
+                  id="email"
+                  placeholder="you@company.com"
+                  value={email}
+                  onFocus={() => setMenuOpen(false)}
+                  onClick={() => setMenuOpen(false)}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                />
               </div>
 
               <Button className="w-full bg-indigo-200 hover:bg-indigo-700 text-white" disabled={loading} type="submit">

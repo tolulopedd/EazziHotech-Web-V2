@@ -46,17 +46,53 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     data = text;
   }
 
+  // ✅ Auto-logout on invalid/expired token
+  if (res.status === 401) {
+    // Your backend log shows: { statusCode: 401, code: "UNAUTHORIZED", message: "Invalid or expired token" }
+    // But your current parser expects data?.error?.message, so we check both shapes.
+    const code =
+      data?.code || data?.error?.code || data?.err?.code || "UNAUTHORIZED";
+    const message =
+      data?.message || data?.error?.message || data?.err?.message || "";
+
+    const shouldLogout =
+      code === "UNAUTHORIZED" ||
+      String(message).toLowerCase().includes("invalid or expired token");
+
+    if (shouldLogout) {
+      // Clear auth + tenant
+      clearAuthSession();
+      localStorage.removeItem("token");
+
+      // Redirect to login (keep where user was going)
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.assign(`/login?next=${next}`);
+
+      // Stop further processing
+      throw Object.assign(new Error("UNAUTHORIZED"), {
+        code: "UNAUTHORIZED",
+        status: 401,
+        data,
+      });
+    }
+  }
+
   if (!res.ok) {
-    const message = data?.error?.message || "Request failed";
-    const code = data?.error?.code || "API_ERROR";
+    const message = data?.error?.message || data?.message || "Request failed";
+    const code = data?.error?.code || data?.code || "API_ERROR";
     throw Object.assign(new Error(message), { code, status: res.status, data });
   }
 
   return data;
 }
 
-export async function publicFetch(path: string) {
-  const res = await fetch(`${API_BASE}${path}`);
+export async function publicFetch(path: string, options: RequestInit = {}) {
+  const headers = new Headers(options.headers || {});
+  if (!headers.has("Content-Type") && options.body) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   const text = await res.text();
 
   let data: any = null;
@@ -67,8 +103,9 @@ export async function publicFetch(path: string) {
   }
 
   if (!res.ok) {
-    const message = data?.error?.message || "Request failed";
-    throw Object.assign(new Error(message), { status: res.status, data });
+    const message = data?.error?.message || data?.message || "Request failed";
+    const code = data?.error?.code || data?.code || "API_ERROR";
+    throw Object.assign(new Error(message), { status: res.status, code, data });
   }
 
   return data;
