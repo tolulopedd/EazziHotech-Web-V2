@@ -10,9 +10,11 @@ import {
   Clock3,
   Globe,
   MapPin,
+  Menu,
   Phone,
   ShieldCheck,
   Users,
+  X,
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -167,6 +169,7 @@ function validateLeadForm(form: LeadForm): LeadErrors {
 
 export default function Landing() {
   const nav = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [recentTenants, setRecentTenants] = useState<RecentTenant[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(true);
   const [leadSubmitting, setLeadSubmitting] = useState(false);
@@ -274,10 +277,16 @@ export default function Landing() {
   function goToDemoForm() {
     trackEvent("landing_book_demo_click");
     document.getElementById("lead-capture")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setMobileMenuOpen(false);
+  }
+
+  function scrollToSection(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    setMobileMenuOpen(false);
   }
 
   return (
-    <div className="min-h-screen text-slate-900" style={{ fontFamily: '"Space Grotesk", "Manrope", sans-serif' }}>
+    <div className="min-h-screen overflow-x-hidden text-slate-900" style={{ fontFamily: '"Space Grotesk", "Manrope", sans-serif' }}>
       <div className="fixed inset-0 -z-10 bg-[radial-gradient(1200px_500px_at_15%_-10%,#fef3c7,transparent),radial-gradient(1000px_450px_at_85%_0%,#dbeafe,transparent),linear-gradient(#ffffff,#f8fafc)]" />
 
       <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/75 backdrop-blur">
@@ -287,32 +296,80 @@ export default function Landing() {
               <img src={logo} alt="EazziHotech logo" className="h-full w-full object-contain" />
             </div>
             <span className="text-lg font-bold tracking-tight">EazziHotech</span>
-            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+            <span className="hidden rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 sm:inline-flex">
               Onboard in 3 days
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => document.getElementById("policies")?.scrollIntoView({ behavior: "smooth" })}>
+          <div className="hidden items-center gap-2 md:flex">
+            <Button variant="ghost" onClick={() => scrollToSection("policies")}>
               Policies
             </Button>
-            <Button variant="ghost" onClick={() => document.getElementById("onboarding")?.scrollIntoView({ behavior: "smooth" })}>
+            <Button variant="ghost" onClick={() => scrollToSection("onboarding")}>
               Onboarding
             </Button>
-            <Button variant="ghost" onClick={() => document.getElementById("faqs")?.scrollIntoView({ behavior: "smooth" })}>
+            <Button variant="ghost" onClick={() => scrollToSection("faqs")}>
               FAQs
             </Button>
-            <Button variant="ghost" onClick={() => document.getElementById("tenants")?.scrollIntoView({ behavior: "smooth" })}>
+            <Button variant="ghost" onClick={() => scrollToSection("tenants")}>
               Tenants
             </Button>
-            <Button variant="ghost" onClick={() => document.getElementById("company")?.scrollIntoView({ behavior: "smooth" })}>
+            <Button variant="ghost" onClick={() => scrollToSection("company")}>
               Contact
             </Button>
-            <Button variant="outline" onClick={() => nav("/login")}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                nav("/login");
+              }}
+            >
               Login
             </Button>
             <Button onClick={goToDemoForm}>Book Demo</Button>
           </div>
+          <Button
+            variant="ghost"
+            className="h-9 w-9 p-0 md:hidden"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
         </div>
+        {mobileMenuOpen ? (
+          <div className="border-t border-slate-200 bg-white md:hidden">
+            <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3">
+              <Button variant="ghost" className="justify-start" onClick={() => scrollToSection("policies")}>
+                Policies
+              </Button>
+              <Button variant="ghost" className="justify-start" onClick={() => scrollToSection("onboarding")}>
+                Onboarding
+              </Button>
+              <Button variant="ghost" className="justify-start" onClick={() => scrollToSection("faqs")}>
+                FAQs
+              </Button>
+              <Button variant="ghost" className="justify-start" onClick={() => scrollToSection("tenants")}>
+                Tenants
+              </Button>
+              <Button variant="ghost" className="justify-start" onClick={() => scrollToSection("company")}>
+                Contact
+              </Button>
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  nav("/login");
+                }}
+              >
+                Login
+              </Button>
+              <Button className="justify-start" onClick={goToDemoForm}>
+                Book Demo
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </header>
 
       <section className="mx-auto max-w-6xl px-4 pb-10 pt-16">
