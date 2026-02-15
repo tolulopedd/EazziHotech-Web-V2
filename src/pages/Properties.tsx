@@ -1,7 +1,6 @@
 // src/pages/Properties.tsx
 
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,7 +69,6 @@ function getUnitPrice(unit: Unit) {
 }
 
 export default function Properties() {
-  const nav = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>("properties");
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -497,7 +495,7 @@ export default function Properties() {
                   key={unit.id}
                   unit={unit}
                   onDelete={() => handleDeleteUnit(unit.propertyId, unit.id)}
-                  canEdit={userRole !== "staff"}
+                  canEdit={true}
                 />
               ))}
             </div>

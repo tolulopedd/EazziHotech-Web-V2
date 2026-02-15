@@ -516,7 +516,7 @@ async function handleCreateBooking() {
   const guestId = selectedGuest?.id;
   if (!checkInDate || !checkOutDate || !guestId) return;
 
-  const finalTotal = editableTotal ? money2(toNumberSafe(editableTotal)) : totalAmount;
+  const finalTotal = editableTotal ? money2(toNumberSafe(editableTotal)) : String(totalAmount ?? "");
   const finalNum = toNumberSafe(finalTotal);
 
   if (!Number.isFinite(finalNum) || finalNum <= 0) {
