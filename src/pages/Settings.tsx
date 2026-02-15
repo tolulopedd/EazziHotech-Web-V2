@@ -899,7 +899,9 @@ export default function Settings() {
                 type="date"
                 value={subscriptionForm.graceEndDate}
                 disabled={!isSuperAdmin}
-                onChange={(e) => setSubscriptionForm((p) => ({ ...p, graceEndDate: e.target.value }))}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  setSubscriptionForm((p) => ({ ...p, graceEndDate: e.target.value }))
+                }
               />
             </div>
           </div>
