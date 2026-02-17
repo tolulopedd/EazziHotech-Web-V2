@@ -89,7 +89,11 @@ async function tryDirectGuestPhotoUpload(path: string, formData: FormData) {
     body: rawFile,
   });
   if (!uploadRes.ok) {
-    throw new Error("Upload failed");
+    let details = "";
+    try {
+      details = (await uploadRes.text()).slice(0, 300);
+    } catch {}
+    throw new Error(`S3 upload failed (${uploadRes.status})${details ? `: ${details}` : ""}`);
   }
 
   return postJson(`/api/bookings/${bookingId}/guest-photo/confirm`, {
@@ -100,7 +104,16 @@ async function tryDirectGuestPhotoUpload(path: string, formData: FormData) {
 }
 
 export async function apiUpload(path: string, formData: FormData) {
-  const directResult = await tryDirectGuestPhotoUpload(path, formData);
+  let directResult: any = null;
+  try {
+    directResult = await tryDirectGuestPhotoUpload(path, formData);
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (msg.toLowerCase().includes("failed to fetch")) {
+      throw new Error("S3 upload blocked by network/CORS. Check bucket CORS AllowedOrigins for your frontend domain.");
+    }
+    throw e;
+  }
   if (directResult) return directResult;
 
   // IMPORTANT: do NOT set Content-Type for FormData
