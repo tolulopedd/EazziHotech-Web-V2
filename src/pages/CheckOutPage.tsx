@@ -82,6 +82,7 @@ export default function CheckOutPage() {
   const [activeBooking, setActiveBooking] = useState<Booking | null>(null);
   const [checkOutError, setCheckOutError] = useState("");
   const [damageChargeNote, setDamageChargeNote] = useState("");
+  const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
 
   // ✅ checkout certification form
   const [checkOutForm, setCheckOutForm] = useState({
@@ -133,6 +134,7 @@ export default function CheckOutPage() {
     setActiveBooking(b);
     setCheckOutError("");
     setDamageChargeNote("");
+    setPhotoLoadFailed(false);
     const outstandingFromServer = String(b.outstandingAmount ?? "0.00");
 
     const now = Date.now();
@@ -632,14 +634,17 @@ export default function CheckOutPage() {
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-start gap-3">
                 <div className="h-36 w-34 rounded-lg border bg-white overflow-hidden flex items-center justify-center shrink-0">
-                  {activeBooking?.guestPhotoUrl ? (
+                  {activeBooking?.guestPhotoUrl && !photoLoadFailed ? (
                     <img
                       src={activeBooking.guestPhotoUrl}
                       alt="Guest"
                       className="h-full w-full object-cover"
+                      onError={() => setPhotoLoadFailed(true)}
                     />
                   ) : (
-                    <span className="text-[10px] text-muted-foreground">No photo</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {activeBooking?.guestPhotoUrl ? "Photo unavailable" : "No photo"}
+                    </span>
                   )}
                 </div>
 
