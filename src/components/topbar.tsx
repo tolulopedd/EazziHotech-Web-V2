@@ -6,10 +6,6 @@ import { Menu, LogOut, User } from "lucide-react";
 
 
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-
-import { Sidebar } from "@/components/sidebar";
 import { apiFetch, clearAuthSession } from "@/lib/api";
 
 type TenantSubscriptionSnapshot = {
@@ -53,7 +49,6 @@ function buildSubscriptionNotice(input: TenantSubscriptionSnapshot | null) {
 
 export function Topbar({ onMenu }: { onMenu?: () => void })  {
   const nav = useNavigate();
-  const [open, setOpen] = useState(false);
   const [subscriptionNotice, setSubscriptionNotice] = useState<{
     tone: "amber" | "red";
     text: string;
@@ -163,23 +158,14 @@ useEffect(() => {
         <div className="flex items-center gap-3">
           {/* Mobile menu */}
           <div className="md:hidden">
-            <Sheet open={open} onOpenChange={setOpen}>
-              <SheetTrigger asChild>
-<Button
-  variant="ghost"
-  size="icon"
-  className="md:hidden"
-  onClick={onMenu}
->
-  <Menu className="h-5 w-5" />
-</Button>
-              </SheetTrigger>
-
-              <SheetContent side="left" className="w-72 p-0">
-                <Sidebar onNavigate={() => setOpen(false)} />
-                <Separator />
-              </SheetContent>
-            </Sheet>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={onMenu}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
           </div>
 
           {/* Workspace pill */}

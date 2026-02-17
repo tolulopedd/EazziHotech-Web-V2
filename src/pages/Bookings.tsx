@@ -91,17 +91,30 @@ function formatMaybeNGN(value: string | number | null | undefined) {
 /* ================= HELPERS ================= */
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const LAGOS_TZ = "Africa/Lagos";
+const lagosDateFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: LAGOS_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+function lagosDateKey(input: Date | string) {
+  const d = input instanceof Date ? input : new Date(input);
+  return lagosDateFmt.format(d);
+}
+
+function dayNumberFromDateKey(key: string) {
+  const [y, m, d] = key.split("-").map(Number);
+  return Math.floor(Date.UTC(y, (m || 1) - 1, d || 1) / MS_PER_DAY);
+}
+
+function lagosDayNumber(input: Date | string) {
+  return dayNumberFromDateKey(lagosDateKey(input));
 }
 
 function diffNights(from: Date, to: Date) {
-  const a = startOfDay(from).getTime();
-  const b = startOfDay(to).getTime();
-  return Math.max(0, Math.round((b - a) / MS_PER_DAY));
+  return Math.max(0, lagosDayNumber(to) - lagosDayNumber(from));
 }
 
 function money2(n: number) {
@@ -233,13 +246,13 @@ export default function Bookings() {
 
   const hasDateRangeOverlap = useMemo(() => {
     if (!range?.from || !range?.to) return false;
-    const fromMs = startOfDay(range.from).getTime();
-    const toMs = startOfDay(range.to).getTime();
-    if (toMs <= fromMs) return true;
+    const fromDay = lagosDayNumber(range.from);
+    const toDay = lagosDayNumber(range.to);
+    if (toDay <= fromDay) return true;
     return unitBookings.some((b) => {
-      const s = startOfDay(new Date(b.checkIn)).getTime();
-      const e = startOfDay(new Date(b.checkOut)).getTime();
-      return fromMs < e && toMs > s;
+      const s = lagosDayNumber(new Date(b.checkIn));
+      const e = lagosDayNumber(new Date(b.checkOut));
+      return fromDay < e && toDay > s;
     });
   }, [range?.from, range?.to, unitBookings]);
 
@@ -457,10 +470,10 @@ export default function Bookings() {
   }
 
   function isDateBooked(date: Date) {
-    const t = startOfDay(date).getTime();
+    const t = lagosDayNumber(date);
     return unitBookings.some((b) => {
-      const s = startOfDay(new Date(b.checkIn)).getTime();
-      const e = startOfDay(new Date(b.checkOut)).getTime();
+      const s = lagosDayNumber(new Date(b.checkIn));
+      const e = lagosDayNumber(new Date(b.checkOut));
       return t >= s && t < e; // [checkIn, checkOut)
     });
   }
@@ -768,19 +781,19 @@ async function handleCreateBooking() {
                         }}
                         numberOfMonths={2}
                         disabled={(date) => {
-                          const today = startOfDay(new Date());
-                          const d = startOfDay(date);
+                          const today = lagosDayNumber(new Date());
+                          const d = lagosDayNumber(date);
                           if (d < today) return true;
                           if (!range?.from || range?.to) {
-                            return isDateBooked(d);
+                            return isDateBooked(date);
                           }
-                          const fromMs = startOfDay(range.from).getTime();
-                          const toMs = d.getTime();
-                          if (toMs <= fromMs) return true;
+                          const fromDay = lagosDayNumber(range.from);
+                          const toDay = d;
+                          if (toDay <= fromDay) return true;
                           return unitBookings.some((b) => {
-                            const s = startOfDay(new Date(b.checkIn)).getTime();
-                            const e = startOfDay(new Date(b.checkOut)).getTime();
-                            return fromMs < e && toMs > s;
+                            const s = lagosDayNumber(new Date(b.checkIn));
+                            const e = lagosDayNumber(new Date(b.checkOut));
+                            return fromDay < e && toDay > s;
                           });
                         }}
                       />

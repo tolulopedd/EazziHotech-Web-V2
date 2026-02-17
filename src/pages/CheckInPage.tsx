@@ -74,6 +74,24 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+function getCameraOpenErrorMessage(err: unknown) {
+  if (!(err instanceof Error)) return "Unable to access camera. Please use file upload instead.";
+  const name = String((err as { name?: string }).name || "");
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "No camera detected on this device. Please select a photo from files.";
+  }
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return "Camera access was denied. Allow camera permission or select a photo from files.";
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "Camera is in use by another app. Close it and try again, or select a photo from files.";
+  }
+  if (name === "SecurityError") {
+    return "Camera requires a secure connection (HTTPS). Please use file upload for now.";
+  }
+  return "Unable to access camera. Please use file upload instead.";
+}
+
 /* ================= COMPONENT ================= */
 
 export default function CheckInPage() {
@@ -93,8 +111,13 @@ export default function CheckInPage() {
   const [guestPhotoBlob, setGuestPhotoBlob] = useState<Blob | null>(null);
   const [guestPhotoPreview, setGuestPhotoPreview] = useState<string>("");
   const [guestPhotoSize, setGuestPhotoSize] = useState<number>(0);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraBusy, setCameraBusy] = useState(false);
+  const [cameraError, setCameraError] = useState("");
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [updateGuestProfile, setUpdateGuestProfile] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const [checkInForm, setCheckInForm] = useState({
     guestName: "",
@@ -116,6 +139,7 @@ export default function CheckInPage() {
   const guestEmailError = !isValidEmail(checkInForm.guestEmail) ? "Enter a valid email address." : "";
   const canSubmitCheckIn = Boolean(activeBooking) && !guestNameError && !guestEmailError && busyId !== activeBooking?.id;
   const linkedGuestId = activeBooking?.guestId || activeBooking?.guest?.id || "";
+  const canUseWebCamera = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 
   const loadTodayArrivals = useCallback(async () => {
     setError("");
@@ -226,6 +250,9 @@ export default function CheckInPage() {
     setGuestPhotoPreview("");
     setSubmitAttempted(false);
     setUpdateGuestProfile(false);
+    setCameraOpen(false);
+    setCameraError("");
+    stopCameraStream();
 
     const bookingGuestId = b.guestId || b.guest?.id;
     if (bookingGuestId) {
@@ -291,6 +318,104 @@ export default function CheckInPage() {
     };
   }, [guestPhotoPreview]);
 
+  useEffect(() => {
+    return () => {
+      const stream = streamRef.current;
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+    };
+  }, []);
+
+  function stopCameraStream() {
+    const stream = streamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }
+
+  async function openCamera() {
+    if (!canUseWebCamera) {
+      setError("Web camera is not available in this browser.");
+      return;
+    }
+    setCameraError("");
+    setCameraBusy(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraOpen(true);
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          void videoRef.current.play();
+        }
+      });
+    } catch (err: unknown) {
+      setCameraError(getCameraOpenErrorMessage(err));
+    } finally {
+      setCameraBusy(false);
+    }
+  }
+
+  function closeCamera() {
+    setCameraOpen(false);
+    stopCameraStream();
+  }
+
+  async function processPhotoBlob(blob: Blob) {
+    const compressed = await compressToMaxBytes(new File([blob], "guest.jpg", { type: blob.type || "image/jpeg" }), 300 * 1024);
+    setGuestPhotoBlob(compressed);
+    setGuestPhotoSize(compressed.size);
+    const url = URL.createObjectURL(compressed);
+    if (guestPhotoPreview) URL.revokeObjectURL(guestPhotoPreview);
+    setGuestPhotoPreview(url);
+  }
+
+  async function captureFromCamera() {
+    const video = videoRef.current;
+    if (!video) return;
+    const w = video.videoWidth || 720;
+    const h = video.videoHeight || 540;
+    if (!w || !h) {
+      setCameraError("Camera is not ready yet. Try again.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setCameraError("Camera capture is not supported.");
+      return;
+    }
+    ctx.drawImage(video, 0, 0, w, h);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.9);
+    });
+    if (!blob) {
+      setCameraError("Failed to capture photo.");
+      return;
+    }
+
+    try {
+      await processPhotoBlob(blob);
+      closeCamera();
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Failed to process photo."));
+    }
+  }
+
   async function handleGuestPhoto(file: File | null) {
     if (!file) return;
 
@@ -302,15 +427,7 @@ export default function CheckInPage() {
     }
 
     try {
-      const blob = await compressToMaxBytes(file, 300 * 1024);
-
-      setGuestPhotoBlob(blob);
-      setGuestPhotoSize(blob.size);
-
-      // preview
-      const url = URL.createObjectURL(blob);
-      if (guestPhotoPreview) URL.revokeObjectURL(guestPhotoPreview);
-      setGuestPhotoPreview(url);
+      await processPhotoBlob(file);
     } catch (e: unknown) {
       setGuestPhotoBlob(null);
       setGuestPhotoSize(0);
@@ -553,6 +670,9 @@ export default function CheckInPage() {
             setSubmitAttempted(false);
             setUpdateGuestProfile(false);
             activeBookingIdRef.current = "";
+            setCameraOpen(false);
+            setCameraError("");
+            stopCameraStream();
           }
         }}
       >
@@ -671,12 +791,25 @@ export default function CheckInPage() {
       <input
         type="file"
         accept="image/*"
-        capture="user"
         className="block w-full text-sm"
         onChange={(e) => handleGuestPhoto(e.target.files?.[0] ?? null)}
       />
+      {canUseWebCamera ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 px-3 text-xs"
+          onClick={openCamera}
+          disabled={cameraBusy}
+        >
+          {cameraBusy ? "Opening camera..." : "Take Photo (Webcam)"}
+        </Button>
+      ) : null}
       <p className="text-[11px] text-muted-foreground">
-        Photo will be compressed to ≤ 300KB.
+        On mobile, choose Camera to snap a photo or select from gallery/files. On web, select from your computer.
+      </p>
+      <p className="text-[11px] text-muted-foreground">
+        Selected photo will be compressed to ≤ 300KB.
         {guestPhotoSize ? ` Current: ${(guestPhotoSize / 1024).toFixed(0)}KB` : ""}
       </p>
 
@@ -696,6 +829,22 @@ export default function CheckInPage() {
       ) : null}
     </div>
   </div>
+
+  {cameraOpen ? (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
+      <p className="text-xs font-medium text-slate-700">Web camera preview</p>
+      <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-md border bg-black/80" />
+      {cameraError ? <p className="text-xs text-red-600">{cameraError}</p> : null}
+      <div className="flex gap-2">
+        <Button type="button" className="h-8 px-3 text-xs" onClick={captureFromCamera}>
+          Capture
+        </Button>
+        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={closeCamera}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  ) : null}
 </div>
             <div className="space-y-2">
               <Label>Notes (optional)</Label>
