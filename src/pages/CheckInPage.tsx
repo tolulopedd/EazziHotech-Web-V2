@@ -118,6 +118,7 @@ export default function CheckInPage() {
   const [updateGuestProfile, setUpdateGuestProfile] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   const [checkInForm, setCheckInForm] = useState({
     guestName: "",
@@ -789,24 +790,35 @@ export default function CheckInPage() {
 
     <div className="flex-1 space-y-2">
       <input
+        ref={photoInputRef}
         type="file"
         accept="image/*"
-        className="block w-full text-sm"
+        className="hidden"
         onChange={(e) => handleGuestPhoto(e.target.files?.[0] ?? null)}
       />
-      {canUseWebCamera ? (
+      <div className="flex flex-wrap gap-2">
+        {canUseWebCamera ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 px-3 text-xs"
+            onClick={openCamera}
+            disabled={cameraBusy}
+          >
+            {cameraBusy ? "Opening camera..." : "Take Photo (Webcam)"}
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="outline"
           className="h-8 px-3 text-xs"
-          onClick={openCamera}
-          disabled={cameraBusy}
+          onClick={() => photoInputRef.current?.click()}
         >
-          {cameraBusy ? "Opening camera..." : "Take Photo (Webcam)"}
+          Select from Gallery/File
         </Button>
-      ) : null}
+      </div>
       <p className="text-[11px] text-muted-foreground">
-        On mobile, choose Camera to snap a photo or select from gallery/files. On web, select from your computer.
+        Choose one option: snap with camera or select from gallery/files.
       </p>
       <p className="text-[11px] text-muted-foreground">
         Selected photo will be compressed to ≤ 300KB.
