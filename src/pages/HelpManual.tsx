@@ -11,22 +11,31 @@ const MANUAL_SECTIONS: ManualSection[] = [
     id: "purpose",
     title: "1. Purpose",
     paragraphs: [
-      "EazziHotech is a multi-tenant hotel/shortlet operations platform used to manage guests, properties, units, bookings, payments, check-in, check-out, damages, refunds, and reporting from one workspace.",
+      "EazziHotech is a multi-tenant hotel and short-let operations platform designed for complete daily operations control within a secure tenant workspace.",
+      "The platform supports end-to-end workflows: guest onboarding, property and unit inventory, booking lifecycle, payment tracking, check-in and check-out verification, damages and overstay handling, refunds, and reporting.",
+      "This manual is intended for super admins, tenant admins, managers, and front-desk teams who need consistent operational procedures for production usage.",
     ],
   },
   {
     id: "user-roles",
     title: "2. User Roles",
+    paragraphs: [
+      "Access in EazziHotech is role-based. Each role is intentionally scoped to reduce operational risk and maintain governance across tenant workspaces.",
+    ],
     bullets: [
-      "Platform Super Admin: Cross-tenant controls, tenant lifecycle, subscriptions, platform leads.",
-      "Tenant Admin: Full workspace operations, settings, and users.",
-      "Manager: Day-to-day operations with controlled admin permissions.",
-      "Staff: Front desk operations with restricted sensitive controls.",
+      "Platform Super Admin: Cross-tenant controls, tenant creation, subscription governance, platform-level visibility, and leads.",
+      "Tenant Admin: Full tenant workspace operations including settings, user management, property workflows, and approvals.",
+      "Manager: Operational control of bookings, guests, check-in/out, payments, and reports with stricter configuration boundaries.",
+      "Staff: Front desk operations focused on execution workflows with restricted access to sensitive controls.",
+      "Permission rule: Lower-privilege roles cannot manage or escalate higher-privilege users.",
     ],
   },
   {
     id: "login-authentication",
     title: "3. Login and Authentication",
+    paragraphs: [
+      "Every user signs in to a tenant workspace. This workspace context controls accessible records, actions, and API scope.",
+    ],
     steps: [
       "Open Login page.",
       "Select workspace (tenant).",
@@ -34,13 +43,17 @@ const MANUAL_SECTIONS: ManualSection[] = [
       "Click Sign in.",
     ],
     bullets: [
-      "Password reset: Use Forgot password, provide workspace (optional) and email, then complete reset from email link.",
+      "Password reset: Use Forgot password, provide workspace (optional but recommended) and email, then complete reset through email link.",
       "Session timeout: Users are automatically logged out after 5 minutes of inactivity.",
+      "Security note: Always log out when changing device or shift.",
     ],
   },
   {
     id: "main-navigation",
     title: "4. Main Navigation",
+    paragraphs: [
+      "Use the sidebar and topbar to move across operational modules. Modules displayed can vary by role.",
+    ],
     bullets: [
       "Dashboard",
       "Properties",
@@ -58,6 +71,9 @@ const MANUAL_SECTIONS: ManualSection[] = [
   {
     id: "dashboard",
     title: "5. Dashboard",
+    paragraphs: [
+      "Dashboard is your operational command view. It provides role-aware summaries so teams can identify what needs attention first.",
+    ],
     bullets: [
       "Role-based summary cards",
       "Booking and payment visibility",
@@ -68,25 +84,40 @@ const MANUAL_SECTIONS: ManualSection[] = [
   {
     id: "properties-units",
     title: "6. Properties and Units",
+    paragraphs: [
+      "Properties and units are the foundation of room availability, occupancy, and revenue calculations.",
+    ],
     steps: [
       "Create Property: Properties -> Create New Property -> fill details -> Save.",
       "Add Unit: Open property -> Add Unit -> fill unit details -> Save.",
     ],
-    bullets: ["Property indicators include unit count, occupancy, and monthly revenue."],
+    bullets: [
+      "Property indicators include unit count, occupancy, and monthly revenue.",
+      "Always confirm unit capacity, base price, and active status before accepting bookings.",
+    ],
   },
   {
     id: "guests",
     title: "7. Guests",
+    paragraphs: [
+      "Guest master records should be kept clean and complete. Booking, check-in, and checkout workflows reuse this profile for consistency.",
+    ],
     steps: [
       "Guests -> Create Guest.",
       "Enter guest details (name, contacts, nationality/address, ID information).",
       "Save guest.",
     ],
-    bullets: ["Search by name, email, phone, or ID and open full profile details."],
+    bullets: [
+      "Search by name, email, phone, or ID and open full profile details.",
+      "Maintain complete ID details to reduce check-in delays and verification issues.",
+    ],
   },
   {
     id: "bookings",
     title: "8. Bookings",
+    paragraphs: [
+      "Bookings represent the financial and occupancy commitment for a guest stay. Validation rules prevent overlap and inconsistent statuses.",
+    ],
     steps: [
       "Bookings -> New Booking.",
       "Select property/unit and check-in/check-out dates.",
@@ -96,20 +127,28 @@ const MANUAL_SECTIONS: ManualSection[] = [
     bullets: [
       "Date availability checks follow Africa/Lagos timezone day logic.",
       "Record payment directly from booking for UNPAID/PARTPAID records.",
+      "Use accurate check-in/check-out times and amount values for clean reporting.",
     ],
   },
   {
     id: "payments",
     title: "9. Payments",
+    paragraphs: [
+      "Payments module tracks what has been paid and what is still due per booking, with clear status transitions.",
+    ],
     bullets: [
       "Pending tab tracks balances due.",
       "Confirmed tab tracks confirmed payment records.",
       "Use search and booking filters for reconciliation.",
+      "Ensure payment references are entered correctly for audit traceability.",
     ],
   },
   {
     id: "check-in",
     title: "10. Check In",
+    paragraphs: [
+      "Check-in validates booking readiness, guest identity information, and required payment/deposit logic before occupancy starts.",
+    ],
     steps: [
       "Open Check In and select booking from arrivals.",
       "Validate guest/ID details.",
@@ -119,11 +158,15 @@ const MANUAL_SECTIONS: ManualSection[] = [
     bullets: [
       "Guest photo supports both Take Photo (camera/webcam) and Select from Gallery/File.",
       "Mobile devices may offer camera capture directly from file chooser.",
+      "Use 'Also update Guest profile' when current stay details should sync back to guest master.",
     ],
   },
   {
     id: "check-out",
     title: "11. Check Out",
+    paragraphs: [
+      "Checkout finalizes settlement and closes occupancy. The certification modal is the final control point for operational and financial completeness.",
+    ],
     steps: [
       "Open Check Out and search/select in-house guest.",
       "Open checkout certification modal.",
@@ -134,11 +177,15 @@ const MANUAL_SECTIONS: ManualSection[] = [
       "Checkout is blocked when balance remains unsettled.",
       "Damages and overstay charges can be added and reflected in outstanding balance.",
       "Early checkout supports refund policy capture and reporting.",
+      "Verify guest photo, stay dates, and settlement values before final confirmation.",
     ],
   },
   {
     id: "reports",
     title: "12. Reports",
+    paragraphs: [
+      "Reports aggregate operational and financial performance for leadership, audits, and periodic reviews.",
+    ],
     bullets: [
       "Overview",
       "Revenue",
@@ -152,6 +199,9 @@ const MANUAL_SECTIONS: ManualSection[] = [
   {
     id: "settings",
     title: "13. Settings",
+    paragraphs: [
+      "Settings centralize workspace profile, platform controls, and governance-related configuration.",
+    ],
     bullets: [
       "Workspace profile details",
       "Subscription status visibility",
@@ -163,6 +213,9 @@ const MANUAL_SECTIONS: ManualSection[] = [
   {
     id: "users-management",
     title: "14. Users Management",
+    paragraphs: [
+      "User management should be handled with clear role ownership to maintain security and accountability.",
+    ],
     bullets: [
       "Create users",
       "Edit user details",
@@ -172,54 +225,17 @@ const MANUAL_SECTIONS: ManualSection[] = [
     ],
   },
   {
-    id: "leads",
-    title: "15. Leads (Super Admin)",
-    paragraphs: [
-      "Leads page displays public lead submissions from the landing page for structured sales follow-up.",
-    ],
-  },
-  {
     id: "email-notifications",
-    title: "16. Email Notifications",
+    title: "15. Email Notifications",
+    paragraphs: [
+      "Lifecycle notifications keep guests and tenant admins aligned on booking status progression.",
+    ],
     bullets: [
       "Booking confirmation",
       "Check-in confirmation",
       "Check-out confirmation",
       "Recipients: guest and active tenant admin recipients",
       "Requires production email setup (Resend verified domain + correct env values)",
-    ],
-  },
-  {
-    id: "mobile-notes",
-    title: "17. Mobile Experience Notes",
-    bullets: [
-      "Single-instance mobile sidebar drawer",
-      "Scrollable check-in and checkout modals",
-      "Camera/file photo options for guest photo capture",
-    ],
-  },
-  {
-    id: "troubleshooting",
-    title: "18. Troubleshooting",
-    bullets: [
-      "No workspaces found: verify tenant exists and is active.",
-      "Photo upload fails: verify S3 CORS, IAM permissions, backend env, and presign -> upload -> confirm flow.",
-      "Photo unavailable at checkout: verify signed photo URL response and object existence.",
-      "Password reset email not received: verify Resend domain and EMAIL_FROM value.",
-    ],
-  },
-  {
-    id: "day-zero-setup",
-    title: "19. Recommended Day-0 Setup Order",
-    steps: [
-      "Workspace/Tenant setup",
-      "Property creation",
-      "Unit creation",
-      "User creation",
-      "Guest seed/import",
-      "Booking and payment process test",
-      "Check-in/check-out test",
-      "Report verification",
     ],
   },
 ];
@@ -288,4 +304,3 @@ export default function HelpManual() {
     </div>
   );
 }
-

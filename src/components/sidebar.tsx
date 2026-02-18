@@ -14,7 +14,6 @@ import {
   DoorClosed,
   BarChart3, // ✅ NEW
   Inbox,
-  BookOpen,
 } from "lucide-react";
 import logo from "@/assets/logo512.png";
 
@@ -31,7 +30,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   const items = [
     { label: "Dashboard", to: "/app/dashboard", icon: LayoutDashboard },
-    { label: "Help", to: "/app/help", icon: BookOpen },
     { label: "Properties", to: "/app/properties", icon: Building2 },
     { label: "Guests", to: "/app/guests", icon: UserPlus },
     { label: "Bookings", to: "/app/bookings", icon: CalendarCheck2 },
