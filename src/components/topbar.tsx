@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Menu, LogOut, User } from "lucide-react";
+import { Menu, LogOut, User, BookOpen } from "lucide-react";
 
 
 
@@ -62,6 +62,10 @@ export function Topbar({ onMenu }: { onMenu?: () => void })  {
 
   function goProfile() {
     nav("/app/profile");
+  }
+
+  function goHelp() {
+    nav("/app/help");
   }
 
   function logout() {
@@ -203,6 +207,16 @@ useEffect(() => {
 </div>
 
           {/* Profile button */}
+          <Button
+            variant="ghost"
+            className="rounded-lg flex items-center gap-2 text-indigo-700"
+            onClick={goHelp}
+            title="Help"
+          >
+            <BookOpen className="h-4 w-4" />
+            <span className="hidden md:inline">Help</span>
+          </Button>
+
           <Button
             variant="ghost"
             className="rounded-lg flex items-center gap-2"

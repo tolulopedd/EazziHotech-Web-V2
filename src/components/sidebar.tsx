@@ -31,6 +31,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   const items = [
     { label: "Dashboard", to: "/app/dashboard", icon: LayoutDashboard },
+    { label: "Help", to: "/app/help", icon: BookOpen },
     { label: "Properties", to: "/app/properties", icon: Building2 },
     { label: "Guests", to: "/app/guests", icon: UserPlus },
     { label: "Bookings", to: "/app/bookings", icon: CalendarCheck2 },
@@ -44,7 +45,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
     { label: "Settings", to: "/app/settings", icon: Settings },
     { label: "Users Management", to: "/app/users", icon: Users },
-    { label: "Help", to: "/app/help", icon: BookOpen },
   ];
 
   function logout() {
