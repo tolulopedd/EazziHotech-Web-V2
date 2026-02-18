@@ -50,9 +50,28 @@ type UsersResponse = {
   users: User[];
 };
 
+type PlatformTenantAdmin = User & {
+  tenant: {
+    id: string;
+    name: string;
+    slug: string;
+    status: "ACTIVE" | "SUSPENDED";
+    subscriptionStatus?: "ACTIVE" | "GRACE" | "SUSPENDED";
+  };
+};
+
+type PlatformTenantAdminsResponse = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  users: PlatformTenantAdmin[];
+};
+
 export default function Users() {
   const nav = useNavigate();
   const myRole = (localStorage.getItem("userRole") || "STAFF").toUpperCase() as Role;
+  const isSuperAdmin = localStorage.getItem("isSuperAdmin") === "true";
 
   // Guard: STAFF cannot access Users page
   useEffect(() => {
@@ -64,6 +83,7 @@ export default function Users() {
 
   const canCreateManager = myRole === "ADMIN";
   const canManageAll = myRole === "ADMIN";
+  const [scope, setScope] = useState<"TENANT" | "PLATFORM_ADMINS">(isSuperAdmin ? "PLATFORM_ADMINS" : "TENANT");
 
   // Filters
   const [search, setSearch] = useState("");
@@ -73,6 +93,7 @@ export default function Users() {
   // Data
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
+  const [platformAdmins, setPlatformAdmins] = useState<PlatformTenantAdmin[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
@@ -96,6 +117,17 @@ export default function Users() {
   const [editRole, setEditRole] = useState<Role>("STAFF");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    setPage(1);
+    if (scope === "PLATFORM_ADMINS") {
+      setRoleFilter("ADMIN");
+    } else {
+      setRoleFilter(myRole === "MANAGER" ? "STAFF" : "ALL");
+    }
+    setRefreshKey((k) => k + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope]);
+
   // Load users
   useEffect(() => {
     async function load() {
@@ -103,17 +135,25 @@ export default function Users() {
       try {
         const params = new URLSearchParams();
         if (search.trim()) params.set("search", search.trim());
-        if (roleFilter !== "ALL") params.set("role", roleFilter);
-        // Only send status if your backend supports it; if not, remove the next 2 lines
+        if (scope === "TENANT" && roleFilter !== "ALL") params.set("role", roleFilter);
         if (statusFilter !== "ALL") params.set("status", statusFilter);
 
         params.set("page", String(page));
         params.set("pageSize", String(pageSize));
 
-        const data = (await apiFetch(`/api/users?${params.toString()}`)) as UsersResponse;
-        setUsers(Array.isArray(data?.users) ? data.users : []);
-        setTotal(Number(data?.total ?? 0));
-        setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)));
+        if (scope === "PLATFORM_ADMINS" && isSuperAdmin) {
+          const data = (await apiFetch(`/api/platform/tenant-admins?${params.toString()}`)) as PlatformTenantAdminsResponse;
+          setPlatformAdmins(Array.isArray(data?.users) ? data.users : []);
+          setUsers([]);
+          setTotal(Number(data?.total ?? 0));
+          setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)));
+        } else {
+          const data = (await apiFetch(`/api/users?${params.toString()}`)) as UsersResponse;
+          setUsers(Array.isArray(data?.users) ? data.users : []);
+          setPlatformAdmins([]);
+          setTotal(Number(data?.total ?? 0));
+          setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)));
+        }
       } catch (err: any) {
         toast.error(err?.message || "Failed to load users");
       } finally {
@@ -122,7 +162,7 @@ export default function Users() {
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey, page, pageSize]);
+  }, [refreshKey, page, pageSize, scope]);
 
   function canManagerTouch(user: User) {
     // ADMIN can manage all; MANAGER can manage STAFF only
@@ -268,7 +308,9 @@ export default function Users() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
         <p className="text-muted-foreground mt-2">
-          {myRole === "ADMIN"
+          {scope === "PLATFORM_ADMINS"
+            ? "Super Admin view: tenant admins across all workspaces."
+            : myRole === "ADMIN"
             ? "Manage admins, managers, and staff in your tenant."
             : "Manage staff in your tenant."}
         </p>
@@ -282,7 +324,7 @@ export default function Users() {
             <Button variant="outline" onClick={() => setRefreshKey((k) => k + 1)}>
               Refresh
             </Button>
-            <Button onClick={openCreate}>
+            <Button onClick={openCreate} disabled={scope === "PLATFORM_ADMINS"}>
               <Plus className="h-4 w-4 mr-2" />
               New User
             </Button>
@@ -292,6 +334,20 @@ export default function Users() {
         <CardContent className="space-y-4">
           {/* Filters */}
           <div className="grid gap-3 md:grid-cols-3">
+            {isSuperAdmin ? (
+              <div>
+                <Select value={scope} onValueChange={(v: string) => setScope(v as "TENANT" | "PLATFORM_ADMINS")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="View scope" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PLATFORM_ADMINS">Platform Tenant Admins</SelectItem>
+                    <SelectItem value="TENANT">Current Workspace Users</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
             <div className="relative">
               <Search className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
               <Input
@@ -312,9 +368,15 @@ export default function Users() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All roles</SelectItem>
-                  {myRole === "ADMIN" ? <SelectItem value="ADMIN">ADMIN</SelectItem> : null}
-                  {myRole === "ADMIN" ? <SelectItem value="MANAGER">MANAGER</SelectItem> : null}
-                  <SelectItem value="STAFF">STAFF</SelectItem>
+                  {scope === "TENANT" ? (
+                    <>
+                      {myRole === "ADMIN" ? <SelectItem value="ADMIN">ADMIN</SelectItem> : null}
+                      {myRole === "ADMIN" ? <SelectItem value="MANAGER">MANAGER</SelectItem> : null}
+                      <SelectItem value="STAFF">STAFF</SelectItem>
+                    </>
+                  ) : (
+                    <SelectItem value="ADMIN">ADMIN</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -349,7 +411,7 @@ export default function Users() {
               variant="ghost"
               onClick={() => {
                 setSearch("");
-                setRoleFilter(myRole === "MANAGER" ? "STAFF" : "ALL");
+                setRoleFilter(scope === "TENANT" ? (myRole === "MANAGER" ? "STAFF" : "ALL") : "ADMIN");
                 setStatusFilter("ALL");
                 if (page === 1) setRefreshKey((k) => k + 1);
                 else setPage(1);
@@ -362,11 +424,14 @@ export default function Users() {
           {/* Table */}
           <div className="rounded-lg border overflow-hidden">
             <div className="grid grid-cols-12 bg-slate-50 text-xs font-medium text-muted-foreground px-4 py-3">
-              <div className="col-span-4">User</div>
+              <div className={scope === "PLATFORM_ADMINS" ? "col-span-3" : "col-span-4"}>User</div>
+              {scope === "PLATFORM_ADMINS" ? <div className="col-span-3">Tenant</div> : null}
               <div className="col-span-2">Role</div>
-              <div className="col-span-2">Status</div>
-              <div className="col-span-2">Phone</div>
-              <div className="col-span-2 text-right">Actions</div>
+              <div className={scope === "PLATFORM_ADMINS" ? "col-span-2" : "col-span-2"}>Status</div>
+              <div className={scope === "PLATFORM_ADMINS" ? "col-span-1" : "col-span-2"}>Phone</div>
+              <div className={scope === "PLATFORM_ADMINS" ? "col-span-1 text-right" : "col-span-2 text-right"}>
+                {scope === "PLATFORM_ADMINS" ? "Info" : "Actions"}
+              </div>
             </div>
 
             {loading ? (
@@ -374,6 +439,29 @@ export default function Users() {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading users...
               </div>
+            ) : scope === "PLATFORM_ADMINS" ? (
+              platformAdmins.length === 0 ? (
+                <div className="p-6 text-muted-foreground">No tenant admins found.</div>
+              ) : (
+                platformAdmins.map((u) => (
+                  <div key={u.id} className="grid grid-cols-12 px-4 py-3 border-t items-center">
+                    <div className="col-span-3">
+                      <div className="font-medium">{u.fullName || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{u.email}</div>
+                    </div>
+                    <div className="col-span-3">
+                      <div className="font-medium">{u.tenant?.name || "—"}</div>
+                      <div className="text-xs text-muted-foreground">@{u.tenant?.slug || "—"}</div>
+                    </div>
+                    <div className="col-span-2">{roleBadge(u.role)}</div>
+                    <div className="col-span-2">{statusBadge(u.status) || <span className="text-xs text-muted-foreground">—</span>}</div>
+                    <div className="col-span-1 text-sm">{u.phone || "—"}</div>
+                    <div className="col-span-1 flex justify-end">
+                      <Badge variant="outline">{u.tenant?.subscriptionStatus || "ACTIVE"}</Badge>
+                    </div>
+                  </div>
+                ))
+              )
             ) : users.length === 0 ? (
               <div className="p-6 text-muted-foreground">No users found.</div>
             ) : (

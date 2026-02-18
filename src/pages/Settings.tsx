@@ -23,6 +23,7 @@ type Tenant = {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  settings?: TenantSettings | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -94,6 +95,15 @@ function isValidSlug(value: string) {
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }
 
+function toPolicyForm(settings?: TenantSettings | null) {
+  return {
+    minDepositPercent: String(settings?.minDepositPercent ?? 100),
+    maxProperties: String(settings?.maxProperties ?? 20),
+    maxUnits: String(settings?.maxUnits ?? 500),
+    maxUsers: String(settings?.maxUsers ?? 100),
+  };
+}
+
 function progressColor(pct: number) {
   if (pct >= 90) return "bg-red-500";
   if (pct >= 75) return "bg-amber-500";
@@ -151,6 +161,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [savingTenant, setSavingTenant] = useState(false);
   const [savingSubscription, setSavingSubscription] = useState(false);
+  const [savingPolicyLimits, setSavingPolicyLimits] = useState(false);
   const [creatingTenant, setCreatingTenant] = useState(false);
   const [refreshingUsage, setRefreshingUsage] = useState(false);
 
@@ -176,6 +187,7 @@ export default function Settings() {
     currentPeriodEndDate: "",
     graceEndDate: "",
   });
+  const [policyForm, setPolicyForm] = useState(toPolicyForm(null));
   const [platformTenants, setPlatformTenants] = useState<Tenant[]>([]);
   const [selectedPlatformTenantId, setSelectedPlatformTenantId] = useState("");
   const [createTenantForm, setCreateTenantForm] = useState<CreateTenantForm>({
@@ -271,6 +283,7 @@ export default function Settings() {
         currentPeriodEndDate: toDateInput(tObj.currentPeriodEndAt),
         graceEndDate: toDateInput(tObj.graceEndsAt),
       });
+      setPolicyForm(toPolicyForm(sObj));
 
       await loadUsageData(false);
       await loadPlatformTenants(tObj.id);
@@ -301,6 +314,7 @@ export default function Settings() {
           currentPeriodEndDate: toDateInput(preferred.currentPeriodEndAt),
           graceEndDate: toDateInput(preferred.graceEndsAt),
         });
+        setPolicyForm(toPolicyForm(preferred.settings));
       } else {
         setSelectedPlatformTenantId("");
       }
@@ -309,6 +323,7 @@ export default function Settings() {
       localStorage.setItem("isSuperAdmin", "false");
       setPlatformTenants([]);
       setSelectedPlatformTenantId("");
+      setPolicyForm(toPolicyForm(settings));
     }
   }
 
@@ -334,6 +349,27 @@ export default function Settings() {
       subscriptionForm.graceEndDate !== toDateInput(baseTenant.graceEndsAt)
     );
   }, [isSuperAdmin, platformTenants, selectedPlatformTenantId, tenant, subscriptionForm]);
+
+  const selectedPlatformTenant = useMemo(
+    () => platformTenants.find((t) => t.id === selectedPlatformTenantId) || null,
+    [platformTenants, selectedPlatformTenantId]
+  );
+
+  const effectiveSettings = useMemo(() => {
+    if (isSuperAdmin) return selectedPlatformTenant?.settings || null;
+    return settings;
+  }, [isSuperAdmin, selectedPlatformTenant, settings]);
+
+  const policyChanged = useMemo(() => {
+    const base = effectiveSettings;
+    if (!base) return false;
+    return (
+      Number(policyForm.minDepositPercent) !== Number(base.minDepositPercent) ||
+      Number(policyForm.maxProperties) !== Number(base.maxProperties) ||
+      Number(policyForm.maxUnits) !== Number(base.maxUnits) ||
+      Number(policyForm.maxUsers) !== Number(base.maxUsers)
+    );
+  }, [effectiveSettings, policyForm]);
 
   async function saveTenant() {
     if (!isAdmin) return;
@@ -546,6 +582,65 @@ export default function Settings() {
       toast.error(e?.message || "Failed to create tenant workspace");
     } finally {
       setCreatingTenant(false);
+    }
+  }
+
+  async function savePolicyLimits() {
+    if (!isSuperAdmin) return;
+    const targetTenantId = selectedPlatformTenantId || tenant?.id;
+    if (!targetTenantId) return toast.error("Select a tenant first");
+
+    const minDepositPercent = Number.parseInt(policyForm.minDepositPercent, 10);
+    const maxProperties = Number.parseInt(policyForm.maxProperties, 10);
+    const maxUnits = Number.parseInt(policyForm.maxUnits, 10);
+    const maxUsers = Number.parseInt(policyForm.maxUsers, 10);
+
+    if (!Number.isInteger(minDepositPercent) || minDepositPercent < 0 || minDepositPercent > 100) {
+      return toast.error("Min deposit must be an integer between 0 and 100");
+    }
+    if (!Number.isInteger(maxProperties) || maxProperties < 1) {
+      return toast.error("Max properties must be an integer >= 1");
+    }
+    if (!Number.isInteger(maxUnits) || maxUnits < 1) {
+      return toast.error("Max units must be an integer >= 1");
+    }
+    if (!Number.isInteger(maxUsers) || maxUsers < 1) {
+      return toast.error("Max users must be an integer >= 1");
+    }
+
+    try {
+      setSavingPolicyLimits(true);
+      const data = await apiFetch(`/api/platform/tenants/${targetTenantId}/settings`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          minDepositPercent,
+          maxProperties,
+          maxUnits,
+          maxUsers,
+        }),
+      });
+
+      const updatedSettings = data?.settings || null;
+      const updatedTenant = data?.tenant || null;
+      setPolicyForm(toPolicyForm(updatedSettings));
+      setSettings((prev) => (tenant?.id === targetTenantId ? updatedSettings || prev : prev));
+      setPlatformTenants((prev) =>
+        prev.map((t) =>
+          t.id === targetTenantId
+            ? {
+                ...t,
+                ...(updatedTenant || {}),
+                settings: updatedSettings || t.settings || null,
+              }
+            : t
+        )
+      );
+
+      toast.success("Tenant policy and limits updated");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update tenant policy and limits");
+    } finally {
+      setSavingPolicyLimits(false);
     }
   }
 
@@ -843,6 +938,7 @@ export default function Settings() {
                     currentPeriodEndDate: toDateInput(selected?.currentPeriodEndAt),
                     graceEndDate: toDateInput(selected?.graceEndsAt),
                   });
+                  setPolicyForm(toPolicyForm(selected?.settings));
                 }}
               >
                 {!platformTenants.length ? <option value="">No tenants available</option> : null}
@@ -1008,14 +1104,20 @@ export default function Settings() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!settings ? (
+          {!effectiveSettings ? (
             <div className="text-sm text-muted-foreground">Tenant settings not available.</div>
           ) : (
             <>
+              {isSuperAdmin ? (
+                <div className="rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm text-indigo-700">
+                  Super Admin control: update policy and limits for the selected tenant.
+                </div>
+              ) : null}
+
               <div className="grid md:grid-cols-2 gap-4 text-sm">
                 <div className="rounded-lg border border-slate-200 p-3">
                   <p className="text-muted-foreground">Minimum Deposit Required</p>
-                  <p className="text-xl font-semibold mt-1">{settings.minDepositPercent}%</p>
+                  <p className="text-xl font-semibold mt-1">{effectiveSettings.minDepositPercent}%</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Applied during check-in validation for deposit control.
                   </p>
@@ -1023,12 +1125,54 @@ export default function Settings() {
 
                 <div className="rounded-lg border border-slate-200 p-3">
                   <p className="text-muted-foreground">Settings Last Updated</p>
-                  <p className="text-sm font-medium mt-1">{formatDateTime(settings.updatedAt)}</p>
+                  <p className="text-sm font-medium mt-1">{formatDateTime(effectiveSettings.updatedAt)}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Settings are managed by EazziHotech and exposed as read-only here.
+                    {isSuperAdmin ? "Changes apply immediately after save." : "Settings are managed by platform Super Admin."}
                   </p>
                 </div>
               </div>
+
+              {isSuperAdmin ? (
+                <div className="grid md:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label>Min Deposit %</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={policyForm.minDepositPercent}
+                      onChange={(e) => setPolicyForm((p) => ({ ...p, minDepositPercent: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Max Properties</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={policyForm.maxProperties}
+                      onChange={(e) => setPolicyForm((p) => ({ ...p, maxProperties: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Max Units</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={policyForm.maxUnits}
+                      onChange={(e) => setPolicyForm((p) => ({ ...p, maxUnits: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Max Users</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={policyForm.maxUsers}
+                      onChange={(e) => setPolicyForm((p) => ({ ...p, maxUsers: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              ) : null}
 
               <div className="space-y-3 rounded-lg border border-slate-200 p-3">
                 <h3 className="font-semibold text-sm">Usage vs Plan Limits</h3>
@@ -1036,18 +1180,18 @@ export default function Settings() {
                 <ProgressRow
                   label="Properties"
                   current={usage.propertiesCount}
-                  limit={settings.maxProperties}
+                  limit={effectiveSettings.maxProperties}
                 />
                 <ProgressRow
                   label="Units"
                   current={usage.unitsCount}
-                  limit={settings.maxUnits}
+                  limit={effectiveSettings.maxUnits}
                   hidden={!usage.canViewUnits}
                 />
                 <ProgressRow
                   label="Users"
                   current={usage.usersCount}
-                  limit={settings.maxUsers}
+                  limit={effectiveSettings.maxUsers}
                   hidden={!usage.canViewUsers}
                 />
 
@@ -1057,6 +1201,15 @@ export default function Settings() {
                   </p>
                 ) : null}
               </div>
+
+              {isSuperAdmin ? (
+                <div className="flex justify-end">
+                  <Button onClick={savePolicyLimits} disabled={savingPolicyLimits || !policyChanged}>
+                    <Save className="mr-2 h-4 w-4" />
+                    {savingPolicyLimits ? "Saving..." : "Apply Policy & Limit Changes"}
+                  </Button>
+                </div>
+              ) : null}
             </>
           )}
         </CardContent>
