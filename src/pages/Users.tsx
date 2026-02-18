@@ -430,13 +430,13 @@ export default function Users() {
 
           {/* Table */}
           <div className="rounded-lg border overflow-hidden">
-            <div className="grid grid-cols-12 bg-slate-50 text-xs font-medium text-muted-foreground px-4 py-3">
+            <div className="hidden md:grid md:grid-cols-12 bg-slate-50 text-xs font-medium text-muted-foreground px-4 py-3">
               <div className={scope === "PLATFORM_ADMINS" ? "col-span-3" : "col-span-4"}>User</div>
               {scope === "PLATFORM_ADMINS" ? <div className="col-span-3">Tenant</div> : null}
-              <div className="col-span-2">Role</div>
-              <div className={scope === "PLATFORM_ADMINS" ? "col-span-2" : "col-span-2"}>Status</div>
-              <div className={scope === "PLATFORM_ADMINS" ? "col-span-1" : "col-span-2"}>Phone</div>
-              <div className={scope === "PLATFORM_ADMINS" ? "col-span-1 text-right" : "col-span-2 text-right"}>
+              <div className={scope === "PLATFORM_ADMINS" ? "col-span-1" : "col-span-2"}>Role</div>
+              <div className={scope === "PLATFORM_ADMINS" ? "col-span-1" : "col-span-2"}>Status</div>
+              <div className={scope === "PLATFORM_ADMINS" ? "col-span-2" : "col-span-2"}>Phone</div>
+              <div className={scope === "PLATFORM_ADMINS" ? "col-span-2 text-right" : "col-span-2 text-right"}>
                 {scope === "PLATFORM_ADMINS" ? "Info" : "Actions"}
               </div>
             </div>
@@ -451,30 +451,58 @@ export default function Users() {
                 <div className="p-6 text-muted-foreground">No tenant admins found.</div>
               ) : (
                 platformAdmins.map((u) => (
-                  <div key={u.id} className="grid grid-cols-12 px-4 py-3 border-t items-center">
-                    <div className="col-span-3">
+                  <div key={u.id} className="border-t px-4 py-3">
+                    <div className="hidden md:grid md:grid-cols-12 items-center">
+                      <div className="col-span-3">
+                        <div className="font-medium">{u.fullName || "—"}</div>
+                        <div className="text-xs text-muted-foreground">{u.email}</div>
+                      </div>
+                      <div className="col-span-3">
+                        <div className="font-medium">{u.tenant?.name || "—"}</div>
+                        <div className="text-xs text-muted-foreground">@{u.tenant?.slug || "—"}</div>
+                      </div>
+                      <div className="col-span-1">{roleBadge(u.role)}</div>
+                      <div className="col-span-1">{statusBadge(u.status) || <span className="text-xs text-muted-foreground">—</span>}</div>
+                      <div className="col-span-2 text-sm">{u.phone || "—"}</div>
+                      <div className="col-span-2 flex justify-end gap-2">
+                        <Badge variant="outline">{u.tenant?.subscriptionStatus || "ACTIVE"}</Badge>
+                        <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
+                          Edit
+                        </Button>
+                        <Button
+                          variant={u.status === "DISABLED" ? "secondary" : "destructive"}
+                          size="sm"
+                          onClick={() => toggleStatus(u)}
+                        >
+                          {u.status === "DISABLED" ? "Enable" : "Disable"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="md:hidden space-y-2">
                       <div className="font-medium">{u.fullName || "—"}</div>
                       <div className="text-xs text-muted-foreground">{u.email}</div>
-                    </div>
-                    <div className="col-span-3">
                       <div className="font-medium">{u.tenant?.name || "—"}</div>
                       <div className="text-xs text-muted-foreground">@{u.tenant?.slug || "—"}</div>
-                    </div>
-                    <div className="col-span-2">{roleBadge(u.role)}</div>
-                    <div className="col-span-2">{statusBadge(u.status) || <span className="text-xs text-muted-foreground">—</span>}</div>
-                    <div className="col-span-1 text-sm">{u.phone || "—"}</div>
-                    <div className="col-span-1 flex justify-end gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {roleBadge(u.role)}
+                        {statusBadge(u.status) || <Badge variant="outline">—</Badge>}
+                      </div>
+                      <div className="text-sm">Phone: {u.phone || "—"}</div>
                       <Badge variant="outline">{u.tenant?.subscriptionStatus || "ACTIVE"}</Badge>
-                      <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
+                      <div className="flex gap-2 pt-1">
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(u)}>
                         Edit
-                      </Button>
-                      <Button
-                        variant={u.status === "DISABLED" ? "secondary" : "destructive"}
-                        size="sm"
-                        onClick={() => toggleStatus(u)}
-                      >
-                        {u.status === "DISABLED" ? "Enable" : "Disable"}
-                      </Button>
+                        </Button>
+                        <Button
+                          variant={u.status === "DISABLED" ? "secondary" : "destructive"}
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => toggleStatus(u)}
+                        >
+                          {u.status === "DISABLED" ? "Enable" : "Disable"}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -483,39 +511,70 @@ export default function Users() {
               <div className="p-6 text-muted-foreground">No users found.</div>
             ) : (
               users.map((u) => (
-                <div key={u.id} className="grid grid-cols-12 px-4 py-3 border-t items-center">
-                  <div className="col-span-4">
+                <div key={u.id} className="border-t px-4 py-3">
+                  <div className="hidden md:grid md:grid-cols-12 items-center">
+                    <div className="col-span-4">
+                      <div className="font-medium">{u.fullName || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{u.email}</div>
+                    </div>
+
+                    <div className="col-span-2">{roleBadge(u.role)}</div>
+
+                    <div className="col-span-2">
+                      {statusBadge(u.status) || <span className="text-xs text-muted-foreground">—</span>}
+                    </div>
+
+                    <div className="col-span-2 text-sm">{u.phone || "—"}</div>
+
+                    <div className="col-span-2 flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEdit(u)}
+                        disabled={!canManagerTouch(u)}
+                      >
+                        Edit
+                      </Button>
+
+                      <Button
+                        variant={u.status === "DISABLED" ? "secondary" : "destructive"}
+                        size="sm"
+                        onClick={() => toggleStatus(u)}
+                        disabled={!canManagerTouch(u)}
+                      >
+                        {u.status === "DISABLED" ? "Enable" : "Disable"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="md:hidden space-y-2">
                     <div className="font-medium">{u.fullName || "—"}</div>
                     <div className="text-xs text-muted-foreground">{u.email}</div>
-                  </div>
-
-                  <div className="col-span-2">{roleBadge(u.role)}</div>
-
-                  <div className="col-span-2">
-                    {statusBadge(u.status) || <span className="text-xs text-muted-foreground">—</span>}
-                  </div>
-
-                  <div className="col-span-2 text-sm">{u.phone || "—"}</div>
-
-                  <div className="col-span-2 flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEdit(u)}
-                      disabled={!canManagerTouch(u)}
-                    >
-                      Edit
-                    </Button>
-
-                    {/* Status toggle requires status endpoints; if not yet enabled, you can hide this button */}
-                    <Button
-                      variant={u.status === "DISABLED" ? "secondary" : "destructive"}
-                      size="sm"
-                      onClick={() => toggleStatus(u)}
-                      disabled={!canManagerTouch(u)}
-                    >
-                      {u.status === "DISABLED" ? "Enable" : "Disable"}
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {roleBadge(u.role)}
+                      {statusBadge(u.status) || <Badge variant="outline">—</Badge>}
+                    </div>
+                    <div className="text-sm">Phone: {u.phone || "—"}</div>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => openEdit(u)}
+                        disabled={!canManagerTouch(u)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant={u.status === "DISABLED" ? "secondary" : "destructive"}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => toggleStatus(u)}
+                        disabled={!canManagerTouch(u)}
+                      >
+                        {u.status === "DISABLED" ? "Enable" : "Disable"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))
