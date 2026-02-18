@@ -347,7 +347,7 @@ export default function Users() {
                   <SelectTrigger>
                     <SelectValue placeholder="View scope" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white">
                     <SelectItem value="PLATFORM_ADMINS">Platform Tenant Admins</SelectItem>
                     <SelectItem value="TENANT">Current Workspace Users</SelectItem>
                   </SelectContent>
@@ -373,7 +373,7 @@ export default function Users() {
                 <SelectTrigger>
                   <SelectValue placeholder="Filter role" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-white">
                   <SelectItem value="ALL">All roles</SelectItem>
                   {scope === "TENANT" ? (
                     <>
@@ -393,7 +393,7 @@ export default function Users() {
                 <SelectTrigger>
                   <SelectValue placeholder="Filter status" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-white">
                   <SelectItem value="ALL">All status</SelectItem>
                   <SelectItem value="ACTIVE">ACTIVE</SelectItem>
                   <SelectItem value="DISABLED">DISABLED</SelectItem>
@@ -465,7 +465,6 @@ export default function Users() {
                       <div className="col-span-1">{statusBadge(u.status) || <span className="text-xs text-muted-foreground">—</span>}</div>
                       <div className="col-span-2 text-sm">{u.phone || "—"}</div>
                       <div className="col-span-2 flex justify-end gap-2">
-                        <Badge variant="outline">{u.tenant?.subscriptionStatus || "ACTIVE"}</Badge>
                         <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
                           Edit
                         </Button>
@@ -489,7 +488,6 @@ export default function Users() {
                         {statusBadge(u.status) || <Badge variant="outline">—</Badge>}
                       </div>
                       <div className="text-sm">Phone: {u.phone || "—"}</div>
-                      <Badge variant="outline">{u.tenant?.subscriptionStatus || "ACTIVE"}</Badge>
                       <div className="flex gap-2 pt-1">
                         <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(u)}>
                         Edit
