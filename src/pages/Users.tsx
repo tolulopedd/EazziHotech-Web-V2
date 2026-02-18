@@ -165,6 +165,7 @@ export default function Users() {
   }, [refreshKey, page, pageSize, scope]);
 
   function canManagerTouch(user: User) {
+    if (scope === "PLATFORM_ADMINS" && isSuperAdmin) return true;
     // ADMIN can manage all; MANAGER can manage STAFF only
     if (myRole === "ADMIN") return true;
     if (myRole === "MANAGER") return user.role === "STAFF";
@@ -249,10 +250,14 @@ export default function Users() {
         phone: editPhone.trim() || null,
       };
 
-      // ADMIN can change role
-      if (myRole === "ADMIN") payload.role = editRole;
+      // ADMIN can change role; Super Admin platform scope can also change role
+      if (myRole === "ADMIN" || (scope === "PLATFORM_ADMINS" && isSuperAdmin)) payload.role = editRole;
 
-      const res = await apiFetch(`/api/users/${editUser.id}`, {
+      const endpoint =
+        scope === "PLATFORM_ADMINS" && isSuperAdmin
+          ? `/api/platform/users/${editUser.id}`
+          : `/api/users/${editUser.id}`;
+      const res = await apiFetch(endpoint, {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
@@ -274,16 +279,18 @@ export default function Users() {
       return;
     }
 
-    // If your backend has status endpoints enabled:
     const currentlyDisabled = u.status === "DISABLED";
     const endpoint = currentlyDisabled ? "enable" : "disable";
 
     try {
-      await apiFetch(`/api/users/${u.id}/${endpoint}`, { method: "POST" });
+      const url =
+        scope === "PLATFORM_ADMINS" && isSuperAdmin
+          ? `/api/platform/users/${u.id}/${endpoint}`
+          : `/api/users/${u.id}/${endpoint}`;
+      await apiFetch(url, { method: "POST" });
       toast.success(`${currentlyDisabled ? "Enabled" : "Disabled"} ${u.email}`);
       setRefreshKey((k) => k + 1);
     } catch (err: any) {
-      // If you haven't enabled status endpoints yet, you'll get NOT_FOUND — that's OK.
       toast.error(err?.message || "Failed to update status");
     }
   }
@@ -456,8 +463,18 @@ export default function Users() {
                     <div className="col-span-2">{roleBadge(u.role)}</div>
                     <div className="col-span-2">{statusBadge(u.status) || <span className="text-xs text-muted-foreground">—</span>}</div>
                     <div className="col-span-1 text-sm">{u.phone || "—"}</div>
-                    <div className="col-span-1 flex justify-end">
+                    <div className="col-span-1 flex justify-end gap-2">
                       <Badge variant="outline">{u.tenant?.subscriptionStatus || "ACTIVE"}</Badge>
+                      <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
+                        Edit
+                      </Button>
+                      <Button
+                        variant={u.status === "DISABLED" ? "secondary" : "destructive"}
+                        size="sm"
+                        onClick={() => toggleStatus(u)}
+                      >
+                        {u.status === "DISABLED" ? "Enable" : "Disable"}
+                      </Button>
                     </div>
                   </div>
                 ))

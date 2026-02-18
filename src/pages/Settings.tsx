@@ -1114,6 +1114,34 @@ export default function Settings() {
                 </div>
               ) : null}
 
+              {isSuperAdmin ? (
+                <div className="space-y-2">
+                  <Label>Target Tenant</Label>
+                  <select
+                    className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-100"
+                    value={selectedPlatformTenantId}
+                    onChange={(e) => {
+                      const nextId = e.target.value;
+                      setSelectedPlatformTenantId(nextId);
+                      const selected = platformTenants.find((t) => t.id === nextId);
+                      setSubscriptionForm({
+                        subscriptionStatus: selected?.subscriptionStatus || "ACTIVE",
+                        currentPeriodEndDate: toDateInput(selected?.currentPeriodEndAt),
+                        graceEndDate: toDateInput(selected?.graceEndsAt),
+                      });
+                      setPolicyForm(toPolicyForm(selected?.settings));
+                    }}
+                  >
+                    {!platformTenants.length ? <option value="">No tenants available</option> : null}
+                    {platformTenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.slug})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+
               <div className="grid md:grid-cols-2 gap-4 text-sm">
                 <div className="rounded-lg border border-slate-200 p-3">
                   <p className="text-muted-foreground">Minimum Deposit Required</p>
