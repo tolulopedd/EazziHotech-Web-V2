@@ -17,6 +17,7 @@ import CheckInPage from "@/pages/CheckInPage";
 import CheckOutPage from "@/pages/CheckOutPage";
 import Guests from "@/pages/Guests";
 import LeadsPage from "@/pages/LeadsPage";
+import HelpManual from "@/pages/HelpManual";
 
 // ✅ NEW
 import ReportsPage from "@/pages/ReportsPage";
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
           // ✅ NEW
           { path: "reports", element: <ReportsPage /> },
           { path: "leads", element: <LeadsPage /> },
+          { path: "help", element: <HelpManual /> },
 
           { path: "settings", element: <Settings /> },
           { path: "users", element: <Users /> },

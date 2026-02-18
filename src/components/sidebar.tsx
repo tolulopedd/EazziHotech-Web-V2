@@ -14,6 +14,7 @@ import {
   DoorClosed,
   BarChart3, // ✅ NEW
   Inbox,
+  BookOpen,
 } from "lucide-react";
 import logo from "@/assets/logo512.png";
 
@@ -43,6 +44,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
     { label: "Settings", to: "/app/settings", icon: Settings },
     { label: "Users Management", to: "/app/users", icon: Users },
+    { label: "Help", to: "/app/help", icon: BookOpen },
   ];
 
   function logout() {
