@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import logo from "@/assets/logo512.png";
 import { publicFetch } from "@/lib/api";
 import {
   ArrowRight,
@@ -293,7 +292,7 @@ export default function Landing() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-3xl ring-1 ring-indigo-300 overflow-hidden bg-white">
-              <img src={logo} alt="EazziHotech logo" className="h-full w-full object-contain" />
+              <img src="/logo512.png" alt="EazziHotech logo" className="h-full w-full object-contain" />
             </div>
             <span className="text-lg font-bold tracking-tight">EazziHotech</span>
             <span className="hidden rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 sm:inline-flex">
