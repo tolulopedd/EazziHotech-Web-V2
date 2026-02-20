@@ -175,6 +175,8 @@ async function downloadCsv(pathWithQuery: string, filename: string) {
 }
 
 export default function ReportsPage() {
+  const userRole = (localStorage.getItem("userRole") || "staff").toLowerCase();
+  const isAdmin = userRole === "admin";
   const [activeTab, setActiveTab] = useState<ReportTab>("OVERVIEW");
   const [range, setRange] = useState<ReportRange>("MONTH");
   const [from, setFrom] = useState<string>(() => {
@@ -185,7 +187,7 @@ export default function ReportsPage() {
   const [to, setTo] = useState<string>(() => toISODate(new Date()));
 
   const [properties, setProperties] = useState<Property[]>([]);
-  const [propertyId, setPropertyId] = useState<string>(""); // "" = all properties
+  const [propertyId, setPropertyId] = useState<string>(""); // admin-only filter
 
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<"DAILY" | "OUTSTANDING" | null>(null);
@@ -242,10 +244,11 @@ export default function ReportsPage() {
     setError("");
     setLoading(true);
     try {
+      const scopedPropertyId = isAdmin ? propertyId : "";
       const qs =
         `?from=${encodeURIComponent(effective.from)}` +
         `&to=${encodeURIComponent(effective.to)}` +
-        (propertyId ? `&propertyId=${encodeURIComponent(propertyId)}` : "");
+        (scopedPropertyId ? `&propertyId=${encodeURIComponent(scopedPropertyId)}` : "");
 
       const data = await apiFetch(`/api/reports/bookings-payments${qs}`);
       setReport(data as ReportResponse);
@@ -261,14 +264,15 @@ export default function ReportsPage() {
     setError("");
     setDownloading("DAILY");
     try {
+      const scopedPropertyId = isAdmin ? propertyId : "";
       const qs =
         `?from=${encodeURIComponent(effective.from)}` +
         `&to=${encodeURIComponent(effective.to)}` +
-        (propertyId ? `&propertyId=${encodeURIComponent(propertyId)}` : "");
+        (scopedPropertyId ? `&propertyId=${encodeURIComponent(scopedPropertyId)}` : "");
 
       await downloadCsv(
         `/api/reports/bookings-payments/daily.csv${qs}`,
-        `bookings-payments-daily_${effective.from}_${effective.to}${propertyId ? `_property-${propertyId}` : ""}.csv`
+        `bookings-payments-daily_${effective.from}_${effective.to}${scopedPropertyId ? `_property-${scopedPropertyId}` : ""}.csv`
       );
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to export daily CSV"));
@@ -281,14 +285,15 @@ export default function ReportsPage() {
     setError("");
     setDownloading("OUTSTANDING");
     try {
+      const scopedPropertyId = isAdmin ? propertyId : "";
       const qs =
         `?from=${encodeURIComponent(effective.from)}` +
         `&to=${encodeURIComponent(effective.to)}` +
-        (propertyId ? `&propertyId=${encodeURIComponent(propertyId)}` : "");
+        (scopedPropertyId ? `&propertyId=${encodeURIComponent(scopedPropertyId)}` : "");
 
       await downloadCsv(
         `/api/reports/bookings-payments/outstanding.csv${qs}`,
-        `outstanding-bookings_${effective.from}_${effective.to}${propertyId ? `_property-${propertyId}` : ""}.csv`
+        `outstanding-bookings_${effective.from}_${effective.to}${scopedPropertyId ? `_property-${scopedPropertyId}` : ""}.csv`
       );
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to export outstanding CSV"));
@@ -300,6 +305,10 @@ export default function ReportsPage() {
   useEffect(() => {
     loadProperties();
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin && propertyId) setPropertyId("");
+  }, [isAdmin, propertyId]);
 
   useEffect(() => {
     loadReport();
@@ -364,21 +373,27 @@ export default function ReportsPage() {
     </div>
 
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-      {/* ✅ Property always LEFT (col 1) */}
+      {/* Property filter: admin only */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-left">Property</label>
-        <select
-          value={propertyId}
-          onChange={(e: ChangeEvent<HTMLSelectElement>) => setPropertyId(e.target.value)}
-          className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-100"
-        >
-          <option value="">All properties</option>
-          {properties.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        {isAdmin ? (
+          <select
+            value={propertyId}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => setPropertyId(e.target.value)}
+            className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">All properties</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm flex items-center text-slate-700">
+            Assigned properties (auto-scoped)
+          </div>
+        )}
       </div>
 
       {/* ✅ Date filters (cols 2 & 3) only when CUSTOM */}
@@ -414,9 +429,11 @@ export default function ReportsPage() {
       Showing:{" "}
       <span className="font-medium text-slate-900">
         {effective.from} → {effective.to}
-        {propertyId
-          ? ` • ${properties.find((p) => p.id === propertyId)?.name ?? "Selected property"}`
-          : " • All properties"}
+        {isAdmin
+          ? propertyId
+            ? ` • ${properties.find((p) => p.id === propertyId)?.name ?? "Selected property"}`
+            : " • All properties"
+          : " • Assigned properties"}
       </span>
     </div>
 

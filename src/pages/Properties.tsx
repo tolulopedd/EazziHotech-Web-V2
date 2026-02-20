@@ -125,12 +125,16 @@ export default function Properties() {
         console.error("Failed to fetch properties:", err);
       }
 
-      // Fetch all units (for units view)
-      try {
-        const unitsData = await apiFetch("/api/units");
-        setUnits(unitsData.units || []);
-      } catch (err) {
-        console.error("Failed to fetch units:", err);
+      // Fetch all units (admin/manager only). Staff uses per-property units endpoint.
+      if (role !== "staff") {
+        try {
+          const unitsData = await apiFetch("/api/units");
+          setUnits(unitsData.units || []);
+        } catch (err) {
+          console.error("Failed to fetch units:", err);
+        }
+      } else {
+        setUnits([]);
       }
 
       // Fetch tenants (admin only)
@@ -374,7 +378,7 @@ export default function Properties() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">All Properties</h2>
-            {userRole !== "staff" && (
+            {userRole === "admin" && (
               <Dialog open={showPropertyDialog} onOpenChange={setShowPropertyDialog}>
                 <DialogTrigger asChild>
                   <Button>
@@ -438,7 +442,7 @@ export default function Properties() {
                     property={property}
                     onDelete={handleDeleteProperty}
                     onToggleUnits={() => togglePropertyUnits(property)}
-                    canEdit={userRole !== "staff"}
+                    canEdit={userRole === "admin"}
                     onAddUnit={() => {
                       setSelectedProperty(property);
                       setShowUnitDialog(true);
@@ -454,7 +458,7 @@ export default function Properties() {
                             key={unit.id}
                             unit={unit}
                             onDelete={() => handleDeleteUnit(property.id, unit.id)}
-                            canEdit={userRole !== "staff"}
+                            canEdit={userRole === "admin"}
                           />
                         ))
                       ) : (
