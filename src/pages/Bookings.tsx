@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import { apiFetch } from "@/lib/api";
+import { formatNaira } from "@/lib/currency";
+import { formatDateLagos } from "@/lib/format";
 
 /* ================= TYPES ================= */
 
@@ -75,17 +77,11 @@ interface Booking {
 type BookingFormField = "property" | "unit" | "dates" | "guest" | "total";
 type BookingFormErrors = Partial<Record<BookingFormField, string>>;
 
-const formatNGN = (value: number) =>
-  `₦${new Intl.NumberFormat("en-NG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)}`;
-
 function formatMaybeNGN(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === "") return "—";
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return "—";
-  return formatNGN(n);
+  return formatNaira(n);
 }
 
 /* ================= HELPERS ================= */
@@ -142,18 +138,12 @@ function toNoonISO(date: Date) {
 
 function formatRange(r?: DateRange) {
   if (!r?.from) return "";
-  if (!r.to) return r.from.toDateString();
-  return `${r.from.toDateString()} → ${r.to.toDateString()}`;
+  if (!r.to) return formatDateLagos(r.from);
+  return `${formatDateLagos(r.from)} → ${formatDateLagos(r.to)}`;
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  const [day, mon, year] = d
-    .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-    .split(" ");
-  return `${day}-${mon}-${year}`;
+  return formatDateLagos(value);
 }
 
 function toMoneyString(input: string) {
@@ -735,7 +725,7 @@ async function handleCreateBooking() {
                     <option value="">{selectedPropertyId ? "Select unit" : "Select property first"}</option>
                     {units.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.name} • {u.type} • cap {u.capacity} • ₦{u.basePrice}
+                        {u.name} • {u.type} • cap {u.capacity} • {formatMaybeNGN(u.basePrice)}
                       </option>
                     ))}
                   </select>
@@ -832,14 +822,14 @@ async function handleCreateBooking() {
 
                   <p className="text-xs text-muted-foreground">
                     {selectedUnit && nights > 0
-                      ? `${nights} night(s) × ₦${selectedUnit.basePrice} = ₦${totalAmount}`
+                      ? `${nights} night(s) × ${formatMaybeNGN(selectedUnit.basePrice)} = ${formatMaybeNGN(totalAmount)}`
                       : "Select unit and dates to compute total."}
                   </p>
 
                   {totalAmount && editableTotal && editableTotal !== totalAmount && (
                     <p className="text-xs text-amber-700">
-                      Discount applied: ₦
-                      {money2(
+                      Discount applied:{" "}
+                      {formatMaybeNGN(
                         Math.max(0, (toNumberSafe(totalAmount) || 0) - (toNumberSafe(editableTotal) || 0))
                       )}
                     </p>

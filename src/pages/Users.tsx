@@ -38,8 +38,14 @@ type User = {
   status?: Status; // if you enabled status in backend
   fullName?: string | null;
   phone?: string | null;
+  assignedPropertyIds?: string[];
   createdAt?: string;
   updatedAt?: string;
+};
+
+type Property = {
+  id: string;
+  name: string;
 };
 
 type UsersResponse = {
@@ -94,6 +100,7 @@ export default function Users() {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [platformAdmins, setPlatformAdmins] = useState<PlatformTenantAdmin[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
@@ -106,6 +113,7 @@ export default function Users() {
   const [createFullName, setCreateFullName] = useState("");
   const [createPhone, setCreatePhone] = useState("");
   const [createRole, setCreateRole] = useState<Role>(canCreateManager ? "MANAGER" : "STAFF");
+  const [createAssignedPropertyIds, setCreateAssignedPropertyIds] = useState<string[]>([]);
   const [createTempPassword, setCreateTempPassword] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -115,6 +123,7 @@ export default function Users() {
   const [editFullName, setEditFullName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editRole, setEditRole] = useState<Role>("STAFF");
+  const [editAssignedPropertyIds, setEditAssignedPropertyIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -164,6 +173,22 @@ export default function Users() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, page, pageSize, scope]);
 
+  useEffect(() => {
+    async function loadProperties() {
+      if (scope !== "TENANT" || myRole !== "ADMIN") {
+        setProperties([]);
+        return;
+      }
+      try {
+        const data = await apiFetch("/api/properties");
+        setProperties(Array.isArray(data?.properties) ? data.properties.map((p: any) => ({ id: p.id, name: p.name })) : []);
+      } catch {
+        setProperties([]);
+      }
+    }
+    loadProperties();
+  }, [scope, myRole]);
+
   function canManagerTouch(user: User) {
     if (scope === "PLATFORM_ADMINS" && isSuperAdmin) return true;
     // ADMIN can manage all; MANAGER can manage STAFF only
@@ -177,8 +202,21 @@ export default function Users() {
     setCreateFullName("");
     setCreatePhone("");
     setCreateRole(canCreateManager ? "MANAGER" : "STAFF");
+    setCreateAssignedPropertyIds([]);
     setCreateTempPassword("");
     setCreateOpen(true);
+  }
+
+  function toggleCreateAssignedProperty(propertyId: string) {
+    setCreateAssignedPropertyIds((prev) =>
+      prev.includes(propertyId) ? prev.filter((id) => id !== propertyId) : [...prev, propertyId]
+    );
+  }
+
+  function toggleEditAssignedProperty(propertyId: string) {
+    setEditAssignedPropertyIds((prev) =>
+      prev.includes(propertyId) ? prev.filter((id) => id !== propertyId) : [...prev, propertyId]
+    );
   }
 
   async function submitCreate() {
@@ -191,6 +229,10 @@ export default function Users() {
       toast.error("Managers can only create STAFF users.");
       return;
     }
+    if (myRole === "ADMIN" && (createRole === "MANAGER" || createRole === "STAFF") && createAssignedPropertyIds.length === 0) {
+      toast.error("Assign at least one property for Manager/Staff.");
+      return;
+    }
 
     setCreating(true);
     try {
@@ -200,6 +242,9 @@ export default function Users() {
         fullName: createFullName.trim() || undefined,
         phone: createPhone.trim() || undefined,
         tempPassword: createTempPassword.trim() || undefined,
+        ...(myRole === "ADMIN" && (createRole === "MANAGER" || createRole === "STAFF")
+          ? { assignedPropertyIds: createAssignedPropertyIds }
+          : {}),
       };
 
       const res = await apiFetch("/api/users", {
@@ -231,6 +276,7 @@ export default function Users() {
     setEditFullName(u.fullName || "");
     setEditPhone(u.phone || "");
     setEditRole(u.role);
+    setEditAssignedPropertyIds(Array.isArray(u.assignedPropertyIds) ? u.assignedPropertyIds : []);
     setEditOpen(true);
   }
 
@@ -240,6 +286,10 @@ export default function Users() {
     // Manager cannot change role away from STAFF
     if (myRole === "MANAGER" && editRole !== "STAFF") {
       toast.error("Managers cannot promote users.");
+      return;
+    }
+    if (myRole === "ADMIN" && (editRole === "MANAGER" || editRole === "STAFF") && editAssignedPropertyIds.length === 0) {
+      toast.error("Assign at least one property for Manager/Staff.");
       return;
     }
 
@@ -252,6 +302,9 @@ export default function Users() {
 
       // ADMIN can change role; Super Admin platform scope can also change role
       if (myRole === "ADMIN" || (scope === "PLATFORM_ADMINS" && isSuperAdmin)) payload.role = editRole;
+      if (myRole === "ADMIN" && scope === "TENANT" && (editRole === "MANAGER" || editRole === "STAFF")) {
+        payload.assignedPropertyIds = editAssignedPropertyIds;
+      }
 
       const endpoint =
         scope === "PLATFORM_ADMINS" && isSuperAdmin
@@ -662,6 +715,29 @@ export default function Users() {
               ) : null}
             </div>
 
+            {myRole === "ADMIN" && (createRole === "MANAGER" || createRole === "STAFF") ? (
+              <div className="grid gap-2">
+                <Label>Assigned Properties</Label>
+                <div className="max-h-40 overflow-y-auto rounded-md border p-3 space-y-2">
+                  {properties.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No properties available.</p>
+                  ) : (
+                    properties.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={createAssignedPropertyIds.includes(p.id)}
+                          onChange={() => toggleCreateAssignedProperty(p.id)}
+                        />
+                        <span>{p.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Manager/Staff can only access assigned properties.</p>
+              </div>
+            ) : null}
+
             <div className="grid gap-2">
               <Label>Temporary password (optional)</Label>
               <Input
@@ -729,6 +805,29 @@ export default function Users() {
                 <p className="text-xs text-muted-foreground">Only ADMIN can change roles.</p>
               ) : null}
             </div>
+
+            {myRole === "ADMIN" && (editRole === "MANAGER" || editRole === "STAFF") ? (
+              <div className="grid gap-2">
+                <Label>Assigned Properties</Label>
+                <div className="max-h-40 overflow-y-auto rounded-md border p-3 space-y-2">
+                  {properties.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No properties available.</p>
+                  ) : (
+                    properties.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editAssignedPropertyIds.includes(p.id)}
+                          onChange={() => toggleEditAssignedProperty(p.id)}
+                        />
+                        <span>{p.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Manager/Staff can only access assigned properties.</p>
+              </div>
+            ) : null}
           </div>
 
           <DialogFooter className="mt-4">

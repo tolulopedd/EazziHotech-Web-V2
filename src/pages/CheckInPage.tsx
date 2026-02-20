@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiUpload, compressToMaxBytes } from "@/lib/upload";
+import { formatNaira } from "@/lib/currency";
+import { formatDateTimeLagos, formatInteger } from "@/lib/format";
 
 /* ================= TYPES ================= */
 
@@ -456,7 +458,7 @@ export default function CheckInPage() {
           </Button>
 
           <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm">
-            Arrivals today: <span className="font-semibold text-indigo-700">{countToday}</span>
+            Arrivals today: <span className="font-semibold text-indigo-700">{formatInteger(countToday)}</span>
           </div>
         </div>
       </div>
@@ -528,13 +530,13 @@ export default function CheckInPage() {
                           <span>
                             Check-in:{" "}
                             <span className="font-medium text-slate-700">
-                              {new Date(b.checkIn).toLocaleString()}
+                              {formatDateTimeLagos(b.checkIn)}
                             </span>
                           </span>
                           <span>
                             Check-out:{" "}
                             <span className="font-medium text-slate-700">
-                              {new Date(b.checkOut).toLocaleString()}
+                              {formatDateTimeLagos(b.checkOut)}
                             </span>
                           </span>
 
@@ -542,7 +544,7 @@ export default function CheckInPage() {
                             <span>
                               Total:{" "}
                               <span className="font-medium text-slate-700">
-                                {b.totalAmount} {b.currency || "NGN"}
+                                {formatNaira(b.totalAmount)}
                               </span>
                             </span>
                           ) : null}
@@ -635,7 +637,7 @@ export default function CheckInPage() {
                         <p className="text-xs text-muted-foreground mt-2">
                           Check-in:{" "}
                           <span className="font-medium text-slate-700">
-                            {new Date(b.checkIn).toLocaleString()}
+                            {formatDateTimeLagos(b.checkIn)}
                           </span>
                         </p>
                       </div>
@@ -822,7 +824,7 @@ export default function CheckInPage() {
       </p>
       <p className="text-[11px] text-muted-foreground">
         Selected photo will be compressed to ≤ 300KB.
-        {guestPhotoSize ? ` Current: ${(guestPhotoSize / 1024).toFixed(0)}KB` : ""}
+        {guestPhotoSize ? ` Current: ${formatInteger(Math.round(guestPhotoSize / 1024))} KB` : ""}
       </p>
 
       {guestPhotoPreview ? (

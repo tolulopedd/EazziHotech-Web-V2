@@ -15,6 +15,7 @@ import {
   Clock,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { formatNaira } from "@/lib/currency";
 
 type UserRole = "admin" | "manager" | "staff";
 
@@ -68,13 +69,6 @@ type OutstandingItem = {
 };
 
 type OutstandingResponse = { items: OutstandingItem[] };
-
-/** ✅ Reuse this everywhere you display NGN amounts */
-const formatNGN = (value: number) =>
-  `₦${new Intl.NumberFormat("en-NG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)}`;
 
 export default function Dashboard() {
   const nav = useNavigate();
@@ -250,7 +244,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
-                  <p className="text-3xl font-bold">{formatNGN(data.stats.totalRevenue)}</p>
+                  <p className="text-3xl font-bold">{formatNaira(data.stats.totalRevenue)}</p>
                   <p className="text-sm text-muted-foreground">Total revenue</p>
                 </div>
 
@@ -400,7 +394,7 @@ function BookingItem({ booking }: { booking: RecentBooking }) {
       </div>
 
       <div className="text-right mr-4">
-        <p className="font-medium">{formatNGN(booking.amount)}</p>
+        <p className="font-medium">{formatNaira(booking.amount)}</p>
         <p className="text-xs text-muted-foreground">
           {new Date(booking.checkIn).toLocaleDateString()} -{" "}
           {new Date(booking.checkOut).toLocaleDateString()}
@@ -434,7 +428,7 @@ function PaymentItem({ payment }: { payment: PendingPayment }) {
       </div>
 
       <div className="text-right">
-        <p className="font-medium">{formatNGN(payment.amount)}</p>
+        <p className="font-medium">{formatNaira(payment.amount)}</p>
         <p className={`text-xs ${isOverdue ? "text-red-600" : "text-muted-foreground"}`}>
           {new Date(payment.dueDate).toLocaleDateString()}
         </p>

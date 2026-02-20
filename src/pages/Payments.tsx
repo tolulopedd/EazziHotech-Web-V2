@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { formatNaira } from "@/lib/currency";
+import { formatDateLagos, shortId } from "@/lib/format";
 
 type PaymentStatus = "PENDING" | "CONFIRMED" | "FAILED" | "REFUNDED" | string;
 
@@ -65,27 +67,12 @@ type CollectField = "amount" | "reference";
 type CollectErrors = Partial<Record<CollectField, string>>;
 
 function formatDate(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  const [day, mon, year] = d
-    .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-    .split(" ");
-  return `${day}-${mon}-${year}`;
+  return formatDateLagos(value);
 }
 
 function formatMoney(amount?: string | null, currency?: string | null) {
-  const a = amount ? Number(amount) : NaN;
-  if (Number.isNaN(a)) return `${currency || "NGN"} ${amount || "—"}`;
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: currency || "NGN",
-      maximumFractionDigits: 2,
-    }).format(a);
-  } catch {
-    return `${currency || "NGN"} ${a.toFixed(2)}`;
-  }
+  void currency;
+  return formatNaira(amount);
 }
 
 function pillClass(status: string) {
@@ -375,7 +362,7 @@ export default function Payments() {
                     </CardTitle>
 
                     <p className="text-sm text-muted-foreground mt-1">
-                      Booking: <span className="font-mono text-xs">{x.bookingId}</span>
+                      Booking: <span className="font-mono text-xs">{shortId(x.bookingId)}</span>
                     </p>
 
                     <p className="text-sm text-muted-foreground mt-1">
@@ -425,11 +412,11 @@ export default function Payments() {
                       </CardTitle>
 
                       <p className="text-sm text-muted-foreground mt-1">
-                        Ref: {p.reference || "—"} • Payment ID: <span className="font-mono text-xs">{p.id}</span>
+                        Ref: {p.reference || "—"} • Payment ID: <span className="font-mono text-xs">{shortId(p.id)}</span>
                       </p>
 
                       <p className="text-sm text-muted-foreground mt-1">
-                        Booking: <span className="font-mono text-xs">{p.bookingId}</span> • Unit: {unitName} • {guest}{" "}
+                        Booking: <span className="font-mono text-xs">{shortId(p.bookingId)}</span> • Unit: {unitName} • {guest}{" "}
                         <span className="text-sm font-normal text-muted-foreground">{guestEmail}</span>
                       </p>
 
@@ -496,7 +483,7 @@ export default function Payments() {
                     {formatMoney(selectedPending.paidTotal, selectedPending.currency)}
                   </div>
                   <div className="text-muted-foreground mt-1">
-                    Booking: <span className="font-mono text-xs">{selectedPending.bookingId}</span>
+                    Booking: <span className="font-mono text-xs">{shortId(selectedPending.bookingId)}</span>
                   </div>
                 </div>
               </div>

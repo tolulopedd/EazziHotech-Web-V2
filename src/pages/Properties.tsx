@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Building2, Plus, Trash2, ChevronDown, ChevronUp, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { formatNaira } from "@/lib/currency";
 
 interface Property {
   id: string;
@@ -52,14 +53,6 @@ interface Tenant {
 }
 
 type ViewMode = "properties" | "units" | "tenants";
-
-// Format currency safely (basePrice comes as string)
-function formatNaira(value: string | number | null | undefined) {
-  if (value === null || value === undefined || value === "") return "—";
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return String(value);
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
 
 // Get a unit price from either basePrice (preferred) or pricePerNight fallback
 function getUnitPrice(unit: Unit) {
@@ -688,7 +681,7 @@ function PropertyCard({
             </div>
             <div className="p-3 bg-blue-50 rounded-lg">
               <p className="text-xs text-muted-foreground">Monthly</p>
-              <p className="text-lg font-bold text-blue-600">₦{formatNaira(property.monthlyRevenue ?? 0)}</p>
+              <p className="text-lg font-bold text-blue-600">{formatNaira(property.monthlyRevenue ?? 0)}</p>
             </div>
           </div>
           <button
@@ -732,7 +725,7 @@ function UnitCard({ unit, onDelete, canEdit }: { unit: Unit; onDelete: () => voi
 
           <div className="flex items-center gap-4 text-right">
             <div>
-              <p className="text-sm font-medium">₦{formatNaira(price)}/night</p>
+              <p className="text-sm font-medium">{formatNaira(price)}/night</p>
               <p className="text-xs text-muted-foreground">Capacity: {unit.capacity}</p>
             </div>
             <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[unit.status]}`}>

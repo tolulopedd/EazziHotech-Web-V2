@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, RefreshCcw, Download } from "lucide-react";
+import { formatNaira } from "@/lib/currency";
+import { formatDateLagos, formatInteger } from "@/lib/format";
 
 type ReportRange = "TODAY" | "WEEK" | "MONTH" | "CUSTOM";
 type ReportTab = "OVERVIEW" | "REVENUE" | "OUTSTANDING" | "OCCUPANCY" | "REFUNDS" | "DAMAGES";
@@ -100,11 +102,6 @@ function toISODate(d: Date) {
   x.setMinutes(x.getMinutes() - x.getTimezoneOffset());
   return x.toISOString().slice(0, 10);
 }
-
-const fmtNGN = new Intl.NumberFormat("en-NG", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 type EnvMeta = {
   env?: {
@@ -441,19 +438,19 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
               <CardHeader><CardTitle className="text-sm text-muted-foreground">Bookings</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{report?.summary.bookingsCount ?? 0}</div></CardContent>
+              <CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.bookingsCount ?? 0)}</div></CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-sm text-muted-foreground">Total Booking Value</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.totalBookingAmount ?? 0))}</div></CardContent>
+              <CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.totalBookingAmount ?? 0))}</div></CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-sm text-muted-foreground">Collected</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.totalPaid ?? 0))}</div></CardContent>
+              <CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.totalPaid ?? 0))}</div></CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-sm text-muted-foreground">Balance Due</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.outstanding ?? 0))}</div></CardContent>
+              <CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.outstanding ?? 0))}</div></CardContent>
             </Card>
           </div>
 
@@ -462,29 +459,29 @@ export default function ReportsPage() {
               <CardHeader><CardTitle className="text-sm text-muted-foreground">Occupancy</CardTitle></CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{Number(report?.summary.occupancyRate ?? 0).toFixed(1)}%</div>
-                <p className="text-xs text-muted-foreground mt-1">{report?.summary.occupiedUnits ?? 0} / {report?.summary.totalUnits ?? 0} units</p>
+                <p className="text-xs text-muted-foreground mt-1">{formatInteger(report?.summary.occupiedUnits ?? 0)} / {formatInteger(report?.summary.totalUnits ?? 0)} units</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-sm text-muted-foreground">Current Overstays</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{report?.summary.overstayCount ?? 0}</div></CardContent>
+              <CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.overstayCount ?? 0)}</div></CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-sm text-muted-foreground">Early Check-outs</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{report?.summary.earlyCheckoutCount ?? 0}</div></CardContent>
+              <CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.earlyCheckoutCount ?? 0)}</div></CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-sm text-muted-foreground">Damage Charges</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{report?.summary.damagesCount ?? 0}</div></CardContent>
+              <CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.damagesCount ?? 0)}</div></CardContent>
             </Card>
           </div>
         </TabsContent>
 
         <TabsContent value="REVENUE" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Total Booking Value</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.totalBookingAmount ?? 0))}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Total Collected</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.totalPaid ?? 0))}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Balance Due</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.outstanding ?? 0))}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Total Booking Value</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.totalBookingAmount ?? 0))}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Total Collected</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.totalPaid ?? 0))}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Balance Due</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.outstanding ?? 0))}</div></CardContent></Card>
             <Card>
               <CardHeader><CardTitle className="text-sm text-muted-foreground">Collection Rate</CardTitle></CardHeader>
               <CardContent>
@@ -520,12 +517,12 @@ export default function ReportsPage() {
                     <tbody>
                       {report.daily.map((d) => (
                         <tr key={d.day} className="border-b">
-                          <td className="py-2 pr-3 font-medium">{d.day}</td>
-                          <td className="py-2 pr-3">{d.bookingsCreated}</td>
-                          <td className="py-2 pr-3">{d.checkIns}</td>
-                          <td className="py-2 pr-3">₦{fmtNGN.format(d.totalBookingAmount)}</td>
-                          <td className="py-2 pr-3">₦{fmtNGN.format(d.totalPaid)}</td>
-                          <td className="py-2 pr-3">₦{fmtNGN.format(d.outstanding)}</td>
+                          <td className="py-2 pr-3 font-medium">{formatDateLagos(d.day)}</td>
+                          <td className="py-2 pr-3">{formatInteger(d.bookingsCreated)}</td>
+                          <td className="py-2 pr-3">{formatInteger(d.checkIns)}</td>
+                          <td className="py-2 pr-3">{formatNaira(d.totalBookingAmount)}</td>
+                          <td className="py-2 pr-3">{formatNaira(d.totalPaid)}</td>
+                          <td className="py-2 pr-3">{formatNaira(d.outstanding)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -538,10 +535,10 @@ export default function ReportsPage() {
 
         <TabsContent value="OUTSTANDING" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Total Balance Due</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.outstanding ?? 0))}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">0-7 Days</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(outstandingAging.a0to7)}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">8-30 Days</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(outstandingAging.a8to30)}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">31+ Days</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(outstandingAging.a31plus)}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Total Balance Due</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.outstanding ?? 0))}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">0-7 Days</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(outstandingAging.a0to7)}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">8-30 Days</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(outstandingAging.a8to30)}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">31+ Days</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(outstandingAging.a31plus)}</div></CardContent></Card>
           </div>
 
           <Card>
@@ -565,9 +562,9 @@ export default function ReportsPage() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold">₦{fmtNGN.format(Number(x.outstanding))}</p>
+                          <p className="text-sm font-semibold">{formatNaira(Number(x.outstanding))}</p>
                           <p className="text-xs text-muted-foreground">
-                            Paid ₦{fmtNGN.format(Number(x.paidTotal))} / ₦{fmtNGN.format(Number(x.totalAmount))}
+                            Paid {formatNaira(Number(x.paidTotal))} / {formatNaira(Number(x.totalAmount))}
                           </p>
                         </div>
                       </div>
@@ -582,9 +579,9 @@ export default function ReportsPage() {
         <TabsContent value="OCCUPANCY" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Occupancy Rate</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{Number(report?.summary.occupancyRate ?? 0).toFixed(1)}%</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Occupied Units</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{report?.summary.occupiedUnits ?? 0}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Total Units</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{report?.summary.totalUnits ?? 0}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Current Overstays</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{report?.summary.overstayCount ?? 0}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Occupied Units</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.occupiedUnits ?? 0)}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Total Units</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.totalUnits ?? 0)}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Current Overstays</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.overstayCount ?? 0)}</div></CardContent></Card>
           </div>
 
           <Card>
@@ -603,13 +600,13 @@ export default function ReportsPage() {
                             {(x.propertyName ? `${x.propertyName} — ` : "") + (x.unitName || "Unit")} • Due {x.scheduledCheckout}
                           </p>
                           <p className="text-xs text-amber-700 mt-1 font-medium">
-                            Overstayed {x.daysOverstayed} day{x.daysOverstayed === 1 ? "" : "s"}
+                            Overstayed {formatInteger(x.daysOverstayed)} day{x.daysOverstayed === 1 ? "" : "s"}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold">Posted ₦{fmtNGN.format(Number(x.postedOverstay))}</p>
+                          <p className="text-sm font-semibold">Posted {formatNaira(Number(x.postedOverstay))}</p>
                           <p className="text-xs text-muted-foreground">
-                            Est. ₦{fmtNGN.format(Number(x.estimatedOverstay))}
+                            Est. {formatNaira(Number(x.estimatedOverstay))}
                           </p>
                         </div>
                       </div>
@@ -623,10 +620,10 @@ export default function ReportsPage() {
 
         <TabsContent value="REFUNDS" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Early Check-outs</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{report?.summary.earlyCheckoutCount ?? 0}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Refund Approved</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{report?.summary.refundApprovedCount ?? 0}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Eligible Amount</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.refundEligibleTotal ?? 0))}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Approved Amount</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.refundAmountTotal ?? 0))}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Early Check-outs</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.earlyCheckoutCount ?? 0)}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Refund Approved</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.refundApprovedCount ?? 0)}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Eligible Amount</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.refundEligibleTotal ?? 0))}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Approved Amount</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.refundAmountTotal ?? 0))}</div></CardContent></Card>
           </div>
 
           <Card>
@@ -651,9 +648,9 @@ export default function ReportsPage() {
                           {x.refundReason ? <p className="text-xs text-muted-foreground mt-1">Reason: {x.refundReason}</p> : null}
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold">Refund ₦{fmtNGN.format(Number(x.refundAmount))}</p>
+                          <p className="text-sm font-semibold">Refund {formatNaira(Number(x.refundAmount))}</p>
                           <p className="text-xs text-muted-foreground">
-                            Eligible ₦{fmtNGN.format(Number(x.refundEligibleAmount))}
+                            Eligible {formatNaira(Number(x.refundEligibleAmount))}
                           </p>
                         </div>
                       </div>
@@ -667,9 +664,9 @@ export default function ReportsPage() {
 
         <TabsContent value="DAMAGES" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Damage Charges</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{report?.summary.damagesCount ?? 0}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Damage Amount</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.damagesAmountTotal ?? 0))}</div></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Overstay Charges</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">₦{fmtNGN.format(Number(report?.summary.overstayAmountTotal ?? 0))}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Damage Charges</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatInteger(report?.summary.damagesCount ?? 0)}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Damage Amount</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.damagesAmountTotal ?? 0))}</div></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Overstay Charges</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNaira(Number(report?.summary.overstayAmountTotal ?? 0))}</div></CardContent></Card>
           </div>
 
           <Card>
@@ -690,7 +687,7 @@ export default function ReportsPage() {
                           <p className="text-xs text-muted-foreground mt-1">{x.title}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold">₦{fmtNGN.format(Number(x.amount))}</p>
+                          <p className="text-sm font-semibold">{formatNaira(Number(x.amount))}</p>
                         </div>
                       </div>
                     </div>

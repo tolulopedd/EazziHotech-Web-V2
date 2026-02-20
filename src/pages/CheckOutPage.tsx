@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { formatNaira } from "@/lib/currency";
+import { formatDateTimeLagos, formatInteger } from "@/lib/format";
 import {
   AlertCircle,
   Clipboard,
@@ -276,7 +278,7 @@ export default function CheckOutPage() {
         toast.error(msg);
         setCheckOutError(msg);
         if (damagesNum > 0) {
-          setDamageChargeNote(`Damage charge added: ₦${damagesNum.toFixed(2)}. Please settle outstanding to complete checkout.`);
+          setDamageChargeNote(`Damage charge added: ${formatNaira(damagesNum)}. Please settle outstanding to complete checkout.`);
         }
         return;
       }
@@ -416,7 +418,7 @@ export default function CheckOutPage() {
           </Button>
 
           <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm">
-            In-house: <span className="font-semibold text-indigo-700">{count}</span>
+            In-house: <span className="font-semibold text-indigo-700">{formatInteger(count)}</span>
           </div>
         </div>
       </div>
@@ -535,7 +537,7 @@ export default function CheckOutPage() {
                           <span>
                             Checked-in at:{" "}
                             <span className="font-medium text-slate-700">
-                              {b.checkedInAt ? new Date(b.checkedInAt).toLocaleString() : "n/a"}
+                              {b.checkedInAt ? formatDateTimeLagos(b.checkedInAt) : "n/a"}
                             </span>
                           </span>
 
@@ -560,7 +562,7 @@ export default function CheckOutPage() {
                           </span>
                           {overstayed ? (
                             <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
-                              OVERSTAYED • {overstayDays} day{overstayDays === 1 ? "" : "s"}
+                              OVERSTAYED • {formatInteger(overstayDays)} day{overstayDays === 1 ? "" : "s"}
                             </span>
                           ) : null}
                         </div>
@@ -710,7 +712,7 @@ export default function CheckOutPage() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Projected outstanding after damages: <span className="font-semibold">₦{projectedOutstanding.toFixed(2)}</span>
+              Projected outstanding after damages: <span className="font-semibold">{formatNaira(projectedOutstanding)}</span>
             </p>
 
             <div className="space-y-2">
@@ -734,7 +736,7 @@ export default function CheckOutPage() {
             {activeBooking && isOverstayedBooking(activeBooking) ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
                 <p className="text-sm font-semibold text-amber-800">
-                  Overstay detected: {getOverstayDays(activeBooking)} day
+                  Overstay detected: {formatInteger(getOverstayDays(activeBooking))} day
                   {getOverstayDays(activeBooking) === 1 ? "" : "s"} past scheduled checkout
                 </p>
 
@@ -798,7 +800,7 @@ export default function CheckOutPage() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Nightly Rate</p>
-                    <p className="text-sm font-medium">₦{nightlyRate.toFixed(2)}</p>
+                    <p className="text-sm font-medium">{formatNaira(nightlyRate)}</p>
                   </div>
                 </div>
 
@@ -844,8 +846,8 @@ export default function CheckOutPage() {
                 ) : null}
 
                 <p className="text-xs text-muted-foreground">
-                  Eligible refund: <span className="font-semibold">₦{refundEligible.toFixed(2)}</span> • Suggested:
-                  <span className="font-semibold"> ₦{suggestedRefund.toFixed(2)}</span>
+                  Eligible refund: <span className="font-semibold">{formatNaira(refundEligible)}</span> • Suggested:
+                  <span className="font-semibold"> {formatNaira(suggestedRefund)}</span>
                 </p>
 
                 <label className="flex items-start gap-3 text-sm">
