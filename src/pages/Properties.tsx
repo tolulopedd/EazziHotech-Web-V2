@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Building2, Plus, Trash2, ChevronDown, ChevronUp, Users } from "lucide-react";
+import { Building2, Plus, Trash2, ChevronDown, ChevronUp, Users, Pencil } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatNaira } from "@/lib/currency";
 
@@ -38,6 +38,11 @@ interface Unit {
   propertyId: string;
   type: "ROOM" | "APARTMENT" | string;
   basePrice?: string | null;
+  discountType?: "PERCENT" | "FIXED_PRICE" | null;
+  discountValue?: string | null;
+  discountStart?: string | null;
+  discountEnd?: string | null;
+  discountLabel?: string | null;
   pricePerNight?: number; // fallback for older API/data
   capacity: number;
   status: "available" | "occupied" | "maintenance";
@@ -72,6 +77,8 @@ export default function Properties() {
   // Dialog states
   const [showPropertyDialog, setShowPropertyDialog] = useState(false);
   const [showUnitDialog, setShowUnitDialog] = useState(false);
+  const [showEditPropertyDialog, setShowEditPropertyDialog] = useState(false);
+  const [showEditUnitDialog, setShowEditUnitDialog] = useState(false);
   const [showTenantDialog, setShowTenantDialog] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
@@ -91,12 +98,34 @@ export default function Properties() {
     capacity: "2",
   });
 
+  const [editPropertyForm, setEditPropertyForm] = useState({
+    id: "",
+    name: "",
+    address: "",
+    type: "HOTEL",
+  });
+
+  const [editUnitForm, setEditUnitForm] = useState({
+    id: "",
+    name: "",
+    type: "ROOM" as "ROOM" | "APARTMENT",
+    basePrice: "",
+    capacity: "1",
+    discountType: "" as "" | "PERCENT" | "FIXED_PRICE",
+    discountValue: "",
+    discountStart: "",
+    discountEnd: "",
+    discountLabel: "",
+  });
+
   const [tenantForm, setTenantForm] = useState({
     name: "",
     email: "",
     phone: "",
     role: "manager" as "manager" | "staff",
   });
+  const [editPropertyAttempted, setEditPropertyAttempted] = useState(false);
+  const [editUnitAttempted, setEditUnitAttempted] = useState(false);
 
   useEffect(() => {
     const role = (localStorage.getItem("userRole") || "staff") as "admin" | "manager" | "staff";
@@ -104,6 +133,61 @@ export default function Properties() {
     fetchData(role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const canManageProperties = userRole === "admin" || userRole === "manager";
+  const canDeleteProperties = userRole === "admin";
+  const editPropertyNameError = editPropertyForm.name.trim() ? "" : "Property name is required.";
+  const editPropertyValid = !editPropertyNameError;
+
+  const editUnitNameError = editUnitForm.name.trim() ? "" : "Unit name is required.";
+  const editUnitBasePriceNum = Number(editUnitForm.basePrice || "0");
+  const editUnitBasePriceError =
+    Number.isFinite(editUnitBasePriceNum) && editUnitBasePriceNum >= 0
+      ? ""
+      : "Base price must be a valid number.";
+  const editUnitCapacityNum = Number(editUnitForm.capacity || "0");
+  const editUnitCapacityError =
+    Number.isFinite(editUnitCapacityNum) && editUnitCapacityNum >= 1
+      ? ""
+      : "Capacity must be at least 1.";
+
+  const useDiscount = Boolean(editUnitForm.discountType);
+  const discountValueNum = Number(editUnitForm.discountValue || "0");
+  const discountValueError = !useDiscount
+    ? ""
+    : Number.isFinite(discountValueNum) && discountValueNum > 0
+      ? ""
+      : "Enter a discount value greater than 0.";
+  const discountDatesError = !useDiscount
+    ? ""
+    : editUnitForm.discountStart && editUnitForm.discountEnd
+      ? ""
+      : "Select both promo start and end dates.";
+  const discountDateOrderError =
+    !useDiscount || !editUnitForm.discountStart || !editUnitForm.discountEnd
+      ? ""
+      : new Date(editUnitForm.discountEnd) >= new Date(editUnitForm.discountStart)
+        ? ""
+        : "Promo end date must be on/after promo start date.";
+
+  const effectiveNightlyRate =
+    Number.isFinite(editUnitBasePriceNum) && editUnitBasePriceNum >= 0
+      ? !useDiscount
+        ? editUnitBasePriceNum
+        : editUnitForm.discountType === "PERCENT"
+          ? Math.max(0, editUnitBasePriceNum * (1 - Math.max(0, Math.min(100, discountValueNum || 0)) / 100))
+          : Number.isFinite(discountValueNum)
+            ? Math.max(0, discountValueNum)
+            : 0
+      : 0;
+
+  const editUnitValid =
+    !editUnitNameError &&
+    !editUnitBasePriceError &&
+    !editUnitCapacityError &&
+    !discountValueError &&
+    !discountDatesError &&
+    !discountDateOrderError;
 
   async function fetchData(roleOverride?: "admin" | "manager" | "staff") {
     const role = roleOverride ?? userRole;
@@ -265,6 +349,90 @@ export default function Properties() {
       await fetchData();
     } catch (err: any) {
       toast.error(err?.message || "Failed to create unit");
+    }
+  }
+
+  function openEditProperty(property: Property) {
+    setEditPropertyAttempted(false);
+    setSelectedProperty(property);
+    setEditPropertyForm({
+      id: property.id,
+      name: property.name || "",
+      address: property.address || "",
+      type: (property.type as "HOTEL" | "SHORTLET") || "HOTEL",
+    });
+    setShowEditPropertyDialog(true);
+  }
+
+  async function handleUpdateProperty() {
+    setEditPropertyAttempted(true);
+    if (!editPropertyForm.id || !editPropertyValid) {
+      toast.error(editPropertyNameError || "Please resolve validation errors.");
+      return;
+    }
+    try {
+      await apiFetch(`/api/properties/${editPropertyForm.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editPropertyForm.name.trim(),
+          address: editPropertyForm.address.trim(),
+          type: editPropertyForm.type,
+        }),
+      });
+      toast.success("Property updated");
+      setShowEditPropertyDialog(false);
+      await fetchData();
+      if (selectedProperty?.id) await fetchPropertyUnits(selectedProperty.id);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update property");
+    }
+  }
+
+  function openEditUnit(unit: Unit) {
+    setEditUnitAttempted(false);
+    setEditUnitForm({
+      id: unit.id,
+      name: unit.name || "",
+      type: (unit.type as "ROOM" | "APARTMENT") || "ROOM",
+      basePrice: unit.basePrice ? String(unit.basePrice) : "",
+      capacity: String(unit.capacity ?? 1),
+      discountType: (unit.discountType as "" | "PERCENT" | "FIXED_PRICE") || "",
+      discountValue: unit.discountValue ? String(unit.discountValue) : "",
+      discountStart: unit.discountStart ? String(unit.discountStart).slice(0, 10) : "",
+      discountEnd: unit.discountEnd ? String(unit.discountEnd).slice(0, 10) : "",
+      discountLabel: unit.discountLabel ? String(unit.discountLabel) : "",
+    });
+    setShowEditUnitDialog(true);
+  }
+
+  async function handleUpdateUnit() {
+    setEditUnitAttempted(true);
+    if (!editUnitForm.id || !editUnitValid) {
+      toast.error("Please resolve unit form validation errors.");
+      return;
+    }
+
+    try {
+      await apiFetch(`/api/units/${editUnitForm.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editUnitForm.name.trim(),
+          type: editUnitForm.type,
+          basePrice: editUnitBasePriceNum.toFixed(2),
+          capacity: editUnitCapacityNum,
+          discountType: useDiscount ? editUnitForm.discountType : null,
+          discountValue: useDiscount ? Number(editUnitForm.discountValue).toFixed(2) : null,
+          discountStart: useDiscount ? `${editUnitForm.discountStart}T00:00:00.000Z` : null,
+          discountEnd: useDiscount ? `${editUnitForm.discountEnd}T23:59:59.999Z` : null,
+          discountLabel: useDiscount ? editUnitForm.discountLabel.trim() || null : null,
+        }),
+      });
+      toast.success("Unit updated");
+      setShowEditUnitDialog(false);
+      await fetchData();
+      if (selectedProperty?.id) await fetchPropertyUnits(selectedProperty.id);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update unit");
     }
   }
 
@@ -441,8 +609,10 @@ export default function Properties() {
                   <PropertyCard
                     property={property}
                     onDelete={handleDeleteProperty}
+                    onEdit={openEditProperty}
                     onToggleUnits={() => togglePropertyUnits(property)}
-                    canEdit={userRole === "admin"}
+                    canManage={canManageProperties}
+                    canDelete={canDeleteProperties}
                     onAddUnit={() => {
                       setSelectedProperty(property);
                       setShowUnitDialog(true);
@@ -457,8 +627,10 @@ export default function Properties() {
                           <UnitCard
                             key={unit.id}
                             unit={unit}
+                            onEdit={() => openEditUnit(unit)}
                             onDelete={() => handleDeleteUnit(property.id, unit.id)}
-                            canEdit={userRole === "admin"}
+                            canManage={canManageProperties}
+                            canDelete={canDeleteProperties}
                           />
                         ))
                       ) : (
@@ -491,8 +663,10 @@ export default function Properties() {
                 <UnitCard
                   key={unit.id}
                   unit={unit}
+                  onEdit={() => openEditUnit(unit)}
                   onDelete={() => handleDeleteUnit(unit.propertyId, unit.id)}
-                  canEdit={true}
+                  canManage={canManageProperties}
+                  canDelete={canDeleteProperties}
                 />
               ))}
             </div>
@@ -630,6 +804,208 @@ export default function Properties() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={showEditPropertyDialog}
+        onOpenChange={(open) => {
+          setShowEditPropertyDialog(open);
+          if (!open) setEditPropertyAttempted(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Property</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Property Name</Label>
+              <Input
+                value={editPropertyForm.name}
+                onChange={(e) => setEditPropertyForm((p) => ({ ...p, name: e.target.value }))}
+              />
+              {editPropertyAttempted && editPropertyNameError ? (
+                <p className="text-xs text-red-600 mt-1">{editPropertyNameError}</p>
+              ) : null}
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Input
+                value={editPropertyForm.address}
+                onChange={(e) => setEditPropertyForm((p) => ({ ...p, address: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Type</Label>
+              <select
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                value={editPropertyForm.type}
+                onChange={(e) =>
+                  setEditPropertyForm((p) => ({ ...p, type: e.target.value as "HOTEL" | "SHORTLET" }))
+                }
+              >
+                <option value="HOTEL">Hotel</option>
+                <option value="SHORTLET">Shortlet</option>
+              </select>
+            </div>
+            <Button onClick={handleUpdateProperty} className="w-full" disabled={!editPropertyValid}>
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showEditUnitDialog}
+        onOpenChange={(open) => {
+          setShowEditUnitDialog(open);
+          if (!open) setEditUnitAttempted(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Unit</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Unit Name</Label>
+              <Input
+                value={editUnitForm.name}
+                onChange={(e) => setEditUnitForm((p) => ({ ...p, name: e.target.value }))}
+              />
+              {editUnitAttempted && editUnitNameError ? (
+                <p className="text-xs text-red-600 mt-1">{editUnitNameError}</p>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Type</Label>
+                <select
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                  value={editUnitForm.type}
+                  onChange={(e) => setEditUnitForm((p) => ({ ...p, type: e.target.value as "ROOM" | "APARTMENT" }))}
+                >
+                  <option value="ROOM">Room</option>
+                  <option value="APARTMENT">Apartment</option>
+                </select>
+              </div>
+              <div>
+                <Label>Capacity</Label>
+                <Input
+                  type="number"
+                  value={editUnitForm.capacity}
+                  onChange={(e) => setEditUnitForm((p) => ({ ...p, capacity: e.target.value }))}
+                />
+                {editUnitAttempted && editUnitCapacityError ? (
+                  <p className="text-xs text-red-600 mt-1">{editUnitCapacityError}</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div>
+              <Label>Base Price Per Night (₦)</Label>
+              <Input
+                type="number"
+                value={editUnitForm.basePrice}
+                onChange={(e) => setEditUnitForm((p) => ({ ...p, basePrice: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                This is your default nightly rate when no promo is active.
+              </p>
+              {editUnitAttempted && editUnitBasePriceError ? (
+                <p className="text-xs text-red-600 mt-1">{editUnitBasePriceError}</p>
+              ) : null}
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+              <p className="text-sm font-medium">Temporary Discount / Promo Rate</p>
+              <p className="text-xs text-muted-foreground">
+                Use this for campaigns like weekend promos or festive pricing. Booking totals will automatically use this during the selected dates.
+              </p>
+              <div>
+                <Label>Discount Type</Label>
+                <select
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                  value={editUnitForm.discountType}
+                  onChange={(e) =>
+                    setEditUnitForm((p) => ({
+                      ...p,
+                      discountType: e.target.value as "" | "PERCENT" | "FIXED_PRICE",
+                    }))
+                  }
+                >
+                  <option value="">No discount</option>
+                  <option value="PERCENT">Percent off (%)</option>
+                  <option value="FIXED_PRICE">Fixed nightly rate</option>
+                </select>
+              </div>
+
+              {editUnitForm.discountType ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>{editUnitForm.discountType === "PERCENT" ? "Discount %" : "Promo Rate (₦)"}</Label>
+                      <Input
+                        type="number"
+                        value={editUnitForm.discountValue}
+                        onChange={(e) => setEditUnitForm((p) => ({ ...p, discountValue: e.target.value }))}
+                      />
+                      {editUnitAttempted && discountValueError ? (
+                        <p className="text-xs text-red-600 mt-1">{discountValueError}</p>
+                      ) : null}
+                    </div>
+                    <div>
+                      <Label>Label (optional)</Label>
+                      <Input
+                        placeholder="Weekend promo"
+                        value={editUnitForm.discountLabel}
+                        onChange={(e) => setEditUnitForm((p) => ({ ...p, discountLabel: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Start Date</Label>
+                      <Input
+                        type="date"
+                        value={editUnitForm.discountStart}
+                        onChange={(e) => setEditUnitForm((p) => ({ ...p, discountStart: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label>End Date</Label>
+                      <Input
+                        type="date"
+                        value={editUnitForm.discountEnd}
+                        onChange={(e) => setEditUnitForm((p) => ({ ...p, discountEnd: e.target.value }))}
+                      />
+                    </div>
+                    {editUnitAttempted && discountDatesError ? (
+                      <p className="text-xs text-red-600">{discountDatesError}</p>
+                    ) : null}
+                    {editUnitAttempted && discountDateOrderError ? (
+                      <p className="text-xs text-red-600">{discountDateOrderError}</p>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                <p className="text-xs text-muted-foreground">Effective nightly rate preview</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  {formatNaira(effectiveNightlyRate)}
+                  {useDiscount && editUnitForm.discountStart && editUnitForm.discountEnd
+                    ? ` (from ${editUnitForm.discountStart} to ${editUnitForm.discountEnd})`
+                    : " (default rate)"}
+                </p>
+              </div>
+            </div>
+
+            <Button onClick={handleUpdateUnit} className="w-full" disabled={!editUnitValid}>
+              Save Unit Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -638,14 +1014,18 @@ export default function Properties() {
 function PropertyCard({
   property,
   onDelete,
+  onEdit,
   onToggleUnits,
-  canEdit,
+  canManage,
+  canDelete,
   onAddUnit,
 }: {
   property: Property;
   onDelete: (id: string) => void;
+  onEdit: (property: Property) => void;
   onToggleUnits: () => void;
-  canEdit: boolean;
+  canManage: boolean;
+  canDelete: boolean;
   onAddUnit: () => void;
 }) {
   return (
@@ -659,14 +1039,19 @@ function PropertyCard({
             </p>
           </div>
           <div className="flex gap-2">
-            {canEdit && (
+            {canManage && (
               <>
+                <button onClick={() => onEdit(property)} className="p-2 hover:bg-amber-50 rounded-lg transition">
+                  <Pencil className="h-4 w-4 text-amber-600" />
+                </button>
                 <button onClick={onAddUnit} className="p-2 hover:bg-indigo-50 rounded-lg transition">
                   <Plus className="h-4 w-4 text-indigo-600" />
                 </button>
-                <button onClick={() => onDelete(property.id)} className="p-2 hover:bg-red-50 rounded-lg transition">
-                  <Trash2 className="h-4 w-4 text-red-600" />
-                </button>
+                {canDelete ? (
+                  <button onClick={() => onDelete(property.id)} className="p-2 hover:bg-red-50 rounded-lg transition">
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </button>
+                ) : null}
               </>
             )}
           </div>
@@ -702,7 +1087,19 @@ function PropertyCard({
 }
 
 // Unit Card Component
-function UnitCard({ unit, onDelete, canEdit }: { unit: Unit; onDelete: () => void; canEdit: boolean }) {
+function UnitCard({
+  unit,
+  onEdit,
+  onDelete,
+  canManage,
+  canDelete,
+}: {
+  unit: Unit;
+  onEdit: () => void;
+  onDelete: () => void;
+  canManage: boolean;
+  canDelete: boolean;
+}) {
   const statusColors: Record<Unit["status"], string> = {
     available: "bg-green-100 text-green-800",
     occupied: "bg-blue-100 text-blue-800",
@@ -731,15 +1128,26 @@ function UnitCard({ unit, onDelete, canEdit }: { unit: Unit; onDelete: () => voi
             <div>
               <p className="text-sm font-medium">{formatNaira(price)}/night</p>
               <p className="text-xs text-muted-foreground">Capacity: {unit.capacity}</p>
+              {unit.discountType && unit.discountValue && unit.discountStart && unit.discountEnd ? (
+                <p className="text-xs text-amber-700">
+                  Promo: {unit.discountType === "PERCENT" ? `${unit.discountValue}% off` : `${formatNaira(unit.discountValue)}/night`}{" "}
+                  ({String(unit.discountStart).slice(0, 10)} to {String(unit.discountEnd).slice(0, 10)})
+                </p>
+              ) : null}
             </div>
             <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[unit.status]}`}>
               {unit.status}
             </span>
-            {canEdit && (
+            {canManage ? (
+              <button onClick={onEdit} className="p-2 hover:bg-amber-50 rounded-lg transition">
+                <Pencil className="h-4 w-4 text-amber-600" />
+              </button>
+            ) : null}
+            {canDelete ? (
               <button onClick={onDelete} className="p-2 hover:bg-red-50 rounded-lg transition">
                 <Trash2 className="h-4 w-4 text-red-600" />
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </CardContent>

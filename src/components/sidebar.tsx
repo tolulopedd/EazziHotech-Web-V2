@@ -14,6 +14,7 @@ import {
   DoorClosed,
   BarChart3, // ✅ NEW
   Inbox,
+  Newspaper,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -26,6 +27,9 @@ function cx(...classes: Array<string | false | null | undefined>) {
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const nav = useNavigate();
   const isSuperAdmin = localStorage.getItem("isSuperAdmin") === "true";
+  const userRole = (localStorage.getItem("userRole") || "STAFF").toUpperCase();
+  const tenantSlug = (localStorage.getItem("tenantSlug") || "").toLowerCase();
+  const canManageNews = isSuperAdmin || (userRole === "ADMIN" && tenantSlug === "dtt-shortlet");
 
   const items = [
     { label: "Dashboard", to: "/app/dashboard", icon: LayoutDashboard },
@@ -39,9 +43,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     // ✅ NEW: Reports module
     { label: "Reports", to: "/app/reports", icon: BarChart3 },
     ...(isSuperAdmin ? [{ label: "Leads", to: "/app/leads", icon: Inbox }] : []),
+    ...(canManageNews ? [{ label: "News", to: "/app/news", icon: Newspaper }] : []),
 
     { label: "Settings", to: "/app/settings", icon: Settings },
-    { label: "Users Management", to: "/app/users", icon: Users },
+    ...(userRole !== "STAFF" ? [{ label: "Users Management", to: "/app/users", icon: Users }] : []),
   ];
 
   function logout() {

@@ -52,6 +52,20 @@ type Booking = {
   };
 };
 
+type BookingVisitor = {
+  id: string;
+  bookingId: string;
+  fullName: string;
+  phone?: string | null;
+  idType?: string | null;
+  idNumber?: string | null;
+  purpose?: string | null;
+  isOvernight: boolean;
+  checkInAt: string;
+  checkOutAt?: string | null;
+  notes?: string | null;
+};
+
 function getErrorMessage(e: unknown, fallback: string) {
   if (e && typeof e === "object" && "message" in e) {
     const msg = (e as { message?: unknown }).message;
@@ -81,10 +95,23 @@ export default function CheckOutPage() {
 
   // ✅ modal state
   const [checkOutOpen, setCheckOutOpen] = useState(false);
+  const [visitorOpen, setVisitorOpen] = useState(false);
   const [activeBooking, setActiveBooking] = useState<Booking | null>(null);
+  const [visitorBooking, setVisitorBooking] = useState<Booking | null>(null);
   const [checkOutError, setCheckOutError] = useState("");
   const [damageChargeNote, setDamageChargeNote] = useState("");
   const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
+  const [visitors, setVisitors] = useState<BookingVisitor[]>([]);
+  const [visitorsLoading, setVisitorsLoading] = useState(false);
+  const [visitorsError, setVisitorsError] = useState("");
+  const [visitorBusyId, setVisitorBusyId] = useState<string | null>(null);
+  const [visitorForm, setVisitorForm] = useState({
+    fullName: "",
+    phone: "",
+    purpose: "",
+    isOvernight: false,
+    notes: "",
+  });
 
   // ✅ checkout certification form
   const [checkOutForm, setCheckOutForm] = useState({
@@ -176,6 +203,91 @@ export default function CheckOutPage() {
 
     setCheckOutOpen(true);
     setError("");
+  }
+
+  function openVisitorModal(b: Booking) {
+    setVisitorBooking(b);
+    setVisitors([]);
+    setVisitorsError("");
+    setVisitorBusyId(null);
+    setVisitorForm({
+      fullName: "",
+      phone: "",
+      purpose: "",
+      isOvernight: false,
+      notes: "",
+    });
+    setVisitorOpen(true);
+    void loadVisitors(b.id);
+  }
+
+  async function loadVisitors(bookingId: string) {
+    setVisitorsError("");
+    setVisitorsLoading(true);
+    try {
+      const data = await apiFetch(`/api/bookings/${bookingId}/visitors`);
+      setVisitors((data?.visitors ?? []) as BookingVisitor[]);
+    } catch (e: unknown) {
+      setVisitors([]);
+      setVisitorsError(getErrorMessage(e, "Failed to load visitor log"));
+    } finally {
+      setVisitorsLoading(false);
+    }
+  }
+
+  async function addVisitor() {
+    if (!visitorBooking) return;
+    const name = visitorForm.fullName.trim();
+    if (!name) {
+      setVisitorsError("Visitor name is required.");
+      return;
+    }
+
+    setVisitorBusyId("CREATE");
+    setVisitorsError("");
+    try {
+      await apiFetch(`/api/bookings/${visitorBooking.id}/visitors`, {
+        method: "POST",
+        body: JSON.stringify({
+          fullName: name,
+          phone: visitorForm.phone || null,
+          purpose: visitorForm.purpose || null,
+          isOvernight: visitorForm.isOvernight,
+          notes: visitorForm.notes || null,
+        }),
+      });
+      toast.success("Visitor logged");
+      setVisitorForm({
+        fullName: "",
+        phone: "",
+        purpose: "",
+        isOvernight: false,
+        notes: "",
+      });
+      await loadVisitors(visitorBooking.id);
+    } catch (e: unknown) {
+      setVisitorsError(getErrorMessage(e, "Failed to log visitor"));
+    } finally {
+      setVisitorBusyId(null);
+    }
+  }
+
+  async function markVisitorLeft(visitorId: string) {
+    if (!visitorBooking) return;
+    setVisitorBusyId(visitorId);
+    setVisitorsError("");
+    try {
+      await apiFetch(`/api/bookings/${visitorBooking.id}/visitors/${visitorId}/checkout`, {
+        method: "PATCH",
+        body: JSON.stringify({}),
+      });
+      toast.success("Visitor marked as left");
+      await loadVisitors(visitorBooking.id);
+    } catch (e: unknown) {
+      setVisitorsError(getErrorMessage(e, "Failed to update visitor"));
+    } finally {
+      setVisitorBusyId(null);
+    }
   }
 
   function toMoneyString(input: string) {
@@ -570,6 +682,11 @@ export default function CheckOutPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="outline" onClick={() => openVisitorModal(b)}>
+                        <Users className="mr-2 h-4 w-4" />
+                        Log Visitor
+                      </Button>
+
                       <Button onClick={() => openCheckOutModal(b)} disabled={isBusy}>
                         {isBusy ? (
                           <>
@@ -966,6 +1083,171 @@ export default function CheckOutPage() {
             {!canSubmitCheckout ? (
               <p className="text-xs text-amber-700">Please tick both certifications before you can check-out.</p>
             ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={visitorOpen}
+        onOpenChange={(open: boolean) => {
+          setVisitorOpen(open);
+          if (!open) {
+            setVisitorBooking(null);
+            setVisitors([]);
+            setVisitorsError("");
+            setVisitorBusyId(null);
+            setVisitorForm({
+              fullName: "",
+              phone: "",
+              purpose: "",
+              isOvernight: false,
+              notes: "",
+            });
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-indigo-600" />
+              Visitor Log
+            </DialogTitle>
+            <DialogDescription>
+              Record visitors for {visitorBooking ? displayGuestName(visitorBooking) : "selected guest"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 overflow-y-auto pr-1 max-h-[calc(90vh-120px)]">
+            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">New Visitor</p>
+                <p className="text-xs text-muted-foreground">
+                  Open visitors:{" "}
+                  <span className="font-semibold">
+                    {formatInteger(visitors.filter((v) => !v.checkOutAt).length)}
+                  </span>
+                </p>
+              </div>
+
+              {visitorsError ? (
+                <p className="text-xs text-red-700">{visitorsError}</p>
+              ) : null}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label>Visitor Name</Label>
+                  <Input
+                    value={visitorForm.fullName}
+                    onChange={(e) => setVisitorForm((p) => ({ ...p, fullName: e.target.value }))}
+                    placeholder="Enter visitor name"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Phone (optional)</Label>
+                  <Input
+                    value={visitorForm.phone}
+                    onChange={(e) => setVisitorForm((p) => ({ ...p, phone: e.target.value }))}
+                    placeholder="080..."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Purpose (optional)</Label>
+                  <Input
+                    value={visitorForm.purpose}
+                    onChange={(e) => setVisitorForm((p) => ({ ...p, purpose: e.target.value }))}
+                    placeholder="Visit, delivery, maintenance..."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Notes (optional)</Label>
+                  <Input
+                    value={visitorForm.notes}
+                    onChange={(e) => setVisitorForm((p) => ({ ...p, notes: e.target.value }))}
+                    placeholder="Extra details..."
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={visitorForm.isOvernight}
+                  onChange={(e) => setVisitorForm((p) => ({ ...p, isOvernight: e.target.checked }))}
+                />
+                Staying with guest (overnight)
+              </label>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addVisitor}
+                disabled={visitorBusyId === "CREATE" || !visitorBooking}
+              >
+                {visitorBusyId === "CREATE" ? (
+                  <>
+                    <RefreshCcw className="mr-2 h-4 w-4 animate-spin" />
+                    Logging visitor...
+                  </>
+                ) : (
+                  "Log Visitor"
+                )}
+              </Button>
+            </div>
+
+            <div className="rounded-md border border-slate-200">
+              {visitorsLoading ? (
+                <div className="p-3 text-xs text-muted-foreground">Loading visitor log...</div>
+              ) : visitors.length === 0 ? (
+                <div className="p-3 text-xs text-muted-foreground">No visitors logged for this stay yet.</div>
+              ) : (
+                <div className="divide-y">
+                  {visitors.map((v) => {
+                    const isOpen = !v.checkOutAt;
+                    return (
+                      <div key={v.id} className="p-3 space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{v.fullName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              In: {formatDateTimeLagos(v.checkInAt)}
+                              {v.checkOutAt ? ` • Out: ${formatDateTimeLagos(v.checkOutAt)}` : " • Still in"}
+                            </p>
+                            {(v.phone || v.purpose || v.notes) ? (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {[v.phone, v.purpose, v.notes].filter(Boolean).join(" • ")}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {v.isOvernight ? (
+                              <span className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                                OVERNIGHT
+                              </span>
+                            ) : null}
+                            {isOpen ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => markVisitorLeft(v.id)}
+                                disabled={visitorBusyId === v.id}
+                              >
+                                {visitorBusyId === v.id ? "Updating..." : "Mark Left"}
+                              </Button>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                LEFT
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

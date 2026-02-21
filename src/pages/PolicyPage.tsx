@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { usePageSeo } from "@/lib/usePageSeo";
 import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -150,6 +151,16 @@ export default function PolicyPage() {
     if (!policyId) return null;
     return POLICY_DOCS[policyId] || null;
   }, [policyId]);
+
+  usePageSeo({
+    title: doc ? `${doc.title} | EazziHotech` : "Policy Not Found | EazziHotech",
+    description: doc
+      ? `${doc.title} for EazziHotech platform usage, privacy, security, and support operations.`
+      : "Requested policy page is not available.",
+    canonicalPath: policyId ? `/policies/${policyId}` : "/policies",
+    type: "article",
+    noindex: !doc,
+  });
 
   if (!doc) {
     return (

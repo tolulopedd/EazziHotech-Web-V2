@@ -1,5 +1,5 @@
 import { type ChangeEvent, type KeyboardEvent, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/lib/api";
@@ -75,17 +75,9 @@ type PlatformTenantAdminsResponse = {
 };
 
 export default function Users() {
-  const nav = useNavigate();
   const myRole = (localStorage.getItem("userRole") || "STAFF").toUpperCase() as Role;
   const isSuperAdmin = localStorage.getItem("isSuperAdmin") === "true";
-
-  // Guard: STAFF cannot access Users page
-  useEffect(() => {
-    if (myRole === "STAFF") {
-      toast.error("You don’t have access to User Management.");
-      nav("/app/dashboard");
-    }
-  }, [myRole, nav]);
+  const isStaff = myRole === "STAFF";
 
   const canCreateManager = myRole === "ADMIN";
   const canManageAll = myRole === "ADMIN";
@@ -140,6 +132,7 @@ export default function Users() {
   // Load users
   useEffect(() => {
     async function load() {
+      if (isStaff) return;
       setLoading(true);
       try {
         const params = new URLSearchParams();
@@ -174,6 +167,7 @@ export default function Users() {
   }, [refreshKey, page, pageSize, scope]);
 
   useEffect(() => {
+    if (isStaff) return;
     async function loadProperties() {
       if (scope !== "TENANT" || myRole !== "ADMIN") {
         setProperties([]);
@@ -188,6 +182,11 @@ export default function Users() {
     }
     loadProperties();
   }, [scope, myRole]);
+
+  // Guard: STAFF cannot access Users page
+  if (isStaff) {
+    return <Navigate to="/app/dashboard" replace />;
+  }
 
   function canManagerTouch(user: User) {
     if (scope === "PLATFORM_ADMINS" && isSuperAdmin) return true;

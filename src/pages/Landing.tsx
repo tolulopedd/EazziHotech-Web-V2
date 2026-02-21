@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { publicFetch } from "@/lib/api";
+import { usePageSeo } from "@/lib/usePageSeo";
 import {
   ArrowRight,
   Bot,
@@ -183,6 +184,26 @@ export default function Landing() {
     website: "",
   });
 
+  usePageSeo({
+    title: "EazziHotech | Hospitality Operations Platform",
+    description:
+      "EazziHotech helps hotels and shortlets run bookings, payments, check-in, check-out, and reporting with modern role-based controls.",
+    canonicalPath: "/",
+    type: "website",
+    structuredData: {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "MyEazzi Solution Limited",
+      url: "https://www.eazzihotech.com",
+      logo: `${window.location.origin}/logo512.png`,
+      contactPoint: {
+        "@type": "ContactPoint",
+        telephone: "+234-905-2222-022",
+        contactType: "customer support",
+      },
+    },
+  });
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -300,6 +321,9 @@ export default function Landing() {
             </span>
           </div>
           <div className="hidden items-center gap-2 md:flex">
+            <Button variant="ghost" onClick={() => nav("/news")}>
+              News
+            </Button>
             <Button variant="ghost" onClick={() => scrollToSection("policies")}>
               Policies
             </Button>
@@ -338,6 +362,9 @@ export default function Landing() {
         {mobileMenuOpen ? (
           <div className="border-t border-slate-200 bg-white md:hidden">
             <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3">
+              <Button variant="ghost" className="justify-start" onClick={() => nav("/news")}>
+                News
+              </Button>
               <Button variant="ghost" className="justify-start" onClick={() => scrollToSection("policies")}>
                 Policies
               </Button>
@@ -403,6 +430,9 @@ export default function Landing() {
                 }}
               >
                 Explore Support and Sales
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => nav("/news")}>
+                Visit Newsroom
               </Button>
             </div>
             <div className="grid gap-2 text-sm text-slate-600">

@@ -3,6 +3,9 @@ import { RequireAuth } from "@/app/RequireAuth";
 import { AppLayout } from "@/layouts/AppLayout";
 import Login from "@/pages/Login";
 import Landing from "@/pages/Landing";
+import News from "@/pages/News";
+import NewsArticle from "@/pages/NewsArticle";
+import NewsManager from "@/pages/NewsManager";
 import PolicyPage from "@/pages/PolicyPage";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
@@ -37,6 +40,8 @@ function RouteError() {
 export const router = createBrowserRouter([
   // Public
   { path: "/", element: <Landing />, errorElement: <RouteError /> },
+  { path: "/news", element: <News />, errorElement: <RouteError /> },
+  { path: "/news/:slug", element: <NewsArticle />, errorElement: <RouteError /> },
   { path: "/policies/:policyId", element: <PolicyPage />, errorElement: <RouteError /> },
   { path: "/login", element: <Login />, errorElement: <RouteError /> },
   { path: "/forgot-password", element: <ForgotPassword />, errorElement: <RouteError /> },
@@ -62,6 +67,7 @@ export const router = createBrowserRouter([
           // ✅ NEW
           { path: "reports", element: <ReportsPage /> },
           { path: "leads", element: <LeadsPage /> },
+          { path: "news", element: <NewsManager /> },
           { path: "help", element: <HelpManual /> },
 
           { path: "settings", element: <Settings /> },

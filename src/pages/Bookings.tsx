@@ -33,6 +33,11 @@ interface Unit {
   type: string;
   capacity: number;
   basePrice: string; // "45000.00"
+  discountType?: "PERCENT" | "FIXED_PRICE" | null;
+  discountValue?: string | null;
+  discountStart?: string | null;
+  discountEnd?: string | null;
+  discountLabel?: string | null;
 }
 
 type Guest = {
@@ -111,6 +116,44 @@ function lagosDayNumber(input: Date | string) {
 
 function diffNights(from: Date, to: Date) {
   return Math.max(0, lagosDayNumber(to) - lagosDayNumber(from));
+}
+
+function unitRateForDate(unit: Unit, day: Date) {
+  const base = Number(unit.basePrice);
+  if (!Number.isFinite(base) || base <= 0) return 0;
+
+  if (!unit.discountType || !unit.discountValue || !unit.discountStart || !unit.discountEnd) {
+    return base;
+  }
+
+  const dayN = lagosDayNumber(day);
+  const startN = lagosDayNumber(new Date(unit.discountStart));
+  const endN = lagosDayNumber(new Date(unit.discountEnd));
+  if (dayN < startN || dayN > endN) return base;
+
+  const v = Number(unit.discountValue);
+  if (!Number.isFinite(v) || v <= 0) return base;
+
+  if (unit.discountType === "PERCENT") {
+    const pct = Math.max(0, Math.min(100, v));
+    return Math.max(0, base * (1 - pct / 100));
+  }
+  if (unit.discountType === "FIXED_PRICE") {
+    return Math.max(0, v);
+  }
+  return base;
+}
+
+function bookingTotalForUnit(unit: Unit, from: Date, to: Date) {
+  const n = diffNights(from, to);
+  if (n <= 0) return null;
+  let total = 0;
+  for (let i = 0; i < n; i += 1) {
+    const d = new Date(from);
+    d.setDate(d.getDate() + i);
+    total += unitRateForDate(unit, d);
+  }
+  return money2(total);
 }
 
 function money2(n: number) {
@@ -226,12 +269,7 @@ export default function Bookings() {
 
   const totalAmount = useMemo(() => {
     if (!selectedUnit || !range?.from || !range?.to) return null;
-    if (nights <= 0) return null;
-
-    const bp = Number(selectedUnit.basePrice);
-    if (!Number.isFinite(bp) || bp <= 0) return null;
-
-    return money2(bp * nights);
+    return bookingTotalForUnit(selectedUnit, range.from, range.to);
   }, [selectedUnit, range?.from, range?.to, nights]);
 
   const hasDateRangeOverlap = useMemo(() => {
@@ -726,6 +764,9 @@ async function handleCreateBooking() {
                     {units.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name} • {u.type} • cap {u.capacity} • {formatMaybeNGN(u.basePrice)}
+                        {u.discountType && u.discountValue && u.discountStart && u.discountEnd
+                          ? ` • promo ${u.discountType === "PERCENT" ? `${u.discountValue}%` : formatMaybeNGN(u.discountValue)}`
+                          : ""}
                       </option>
                     ))}
                   </select>
@@ -822,7 +863,7 @@ async function handleCreateBooking() {
 
                   <p className="text-xs text-muted-foreground">
                     {selectedUnit && nights > 0
-                      ? `${nights} night(s) × ${formatMaybeNGN(selectedUnit.basePrice)} = ${formatMaybeNGN(totalAmount)}`
+                      ? `${nights} night(s) • effective total ${formatMaybeNGN(totalAmount)}`
                       : "Select unit and dates to compute total."}
                   </p>
 
