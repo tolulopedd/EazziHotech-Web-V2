@@ -1,4 +1,20 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+let inflightRequests = 0;
+
+function emitNetworkState() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("app:network", { detail: { inFlight: inflightRequests } }));
+}
+
+function beginRequest() {
+  inflightRequests += 1;
+  emitNetworkState();
+}
+
+function endRequest() {
+  inflightRequests = Math.max(0, inflightRequests - 1);
+  emitNetworkState();
+}
 
 
 export function setAuthSession(payload: {
@@ -36,7 +52,10 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   if (tenantId) headers.set("x-tenant-id", tenantId);
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  beginRequest();
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers }).finally(() => {
+    endRequest();
+  });
 
   const text = await res.text();
   let data: any = null;
@@ -92,7 +111,10 @@ export async function publicFetch(path: string, options: RequestInit = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  beginRequest();
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers }).finally(() => {
+    endRequest();
+  });
   const text = await res.text();
 
   let data: any = null;

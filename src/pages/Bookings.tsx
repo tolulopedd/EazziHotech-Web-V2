@@ -79,6 +79,8 @@ interface Booking {
   createdAt: string;
 }
 
+type Role = "ADMIN" | "MANAGER" | "STAFF";
+
 type BookingFormField = "property" | "unit" | "dates" | "guest" | "total";
 type BookingFormErrors = Partial<Record<BookingFormField, string>>;
 
@@ -179,6 +181,11 @@ function toNoonISO(date: Date) {
   return d.toISOString();
 }
 
+function toDateInput(value?: string | null) {
+  if (!value) return "";
+  return lagosDateKey(value);
+}
+
 function formatRange(r?: DateRange) {
   if (!r?.from) return "";
   if (!r.to) return formatDateLagos(r.from);
@@ -204,6 +211,7 @@ function toNumberSafe(v: string) {
 /* ================= COMPONENT ================= */
 
 export default function Bookings() {
+  const userRole = ((localStorage.getItem("userRole") || "staff").toUpperCase() as Role);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [bookingsQuery, setBookingsQuery] = useState("");
@@ -213,7 +221,19 @@ export default function Bookings() {
 
   const [showBookingDialog, setShowBookingDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [creatingGuest, setCreatingGuest] = useState(false);
+  const [creatingBooking, setCreatingBooking] = useState(false);
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [updatingBooking, setUpdatingBooking] = useState(false);
+  const [deletingBookingId, setDeletingBookingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    checkIn: "",
+    checkOut: "",
+    totalAmount: "",
+  });
 
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -518,6 +538,7 @@ export default function Bookings() {
     }
 
     try {
+      setCreatingGuest(true);
       const data = await apiFetch("/api/guests", {
         method: "POST",
         body: JSON.stringify({
@@ -541,12 +562,15 @@ export default function Bookings() {
       toast.success("Guest created");
     } catch (e: any) {
       toast.error(e?.message || "Failed to create guest");
+    } finally {
+      setCreatingGuest(false);
     }
   }
 
   /* ================= CREATE BOOKING ================= */
 
 async function handleCreateBooking() {
+  if (creatingBooking) return;
   setBookingSubmitAttempted(true);
   if (!isBookingFormValid) {
     toast.error("Please resolve highlighted booking form errors.");
@@ -566,6 +590,7 @@ async function handleCreateBooking() {
   }
 
   try {
+    setCreatingBooking(true);
     await apiFetch("/api/bookings", {
       method: "POST",
       body: JSON.stringify({
@@ -609,12 +634,15 @@ async function handleCreateBooking() {
     await fetchBookings("", { append: false, cursor: null });
   } catch (e: any) {
     toast.error(e?.message || "Failed to create booking");
+  } finally {
+    setCreatingBooking(false);
   }
 }
 
   /* ================= PAYMENT ================= */
 
   async function handleRecordPayment() {
+    if (recordingPayment) return;
     if (!selectedBooking) return;
 
     if (!canTakePayment(selectedBooking.paymentStatus)) {
@@ -636,6 +664,7 @@ async function handleCreateBooking() {
     }
 
     try {
+      setRecordingPayment(true);
       await apiFetch(`/api/bookings/${selectedBooking.id}/payments`, {
         method: "POST",
         body: JSON.stringify({
@@ -654,6 +683,70 @@ async function handleCreateBooking() {
       setSelectedBooking(null);
     } catch (e: any) {
       toast.error(e?.message || "Failed to record payment");
+    } finally {
+      setRecordingPayment(false);
+    }
+  }
+
+  async function handleUpdateBooking() {
+    if (updatingBooking) return;
+    if (!editingBooking) return;
+    if (!editForm.checkIn || !editForm.checkOut) {
+      toast.error("Check-in and check-out are required.");
+      return;
+    }
+
+    const checkInDate = new Date(`${editForm.checkIn}T12:00:00`);
+    const checkOutDate = new Date(`${editForm.checkOut}T12:00:00`);
+    if (Number.isNaN(checkInDate.getTime()) || Number.isNaN(checkOutDate.getTime())) {
+      toast.error("Invalid date value.");
+      return;
+    }
+    if (checkOutDate <= checkInDate) {
+      toast.error("Check-out must be after check-in.");
+      return;
+    }
+
+    const amount = toMoneyString(editForm.totalAmount);
+    const amountNum = Number(amount);
+    if (!amount || !Number.isFinite(amountNum) || amountNum <= 0) {
+      toast.error("Enter a valid total amount.");
+      return;
+    }
+
+    try {
+      setUpdatingBooking(true);
+      await apiFetch(`/api/bookings/${editingBooking.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          checkIn: toNoonISO(checkInDate),
+          checkOut: toNoonISO(checkOutDate),
+          totalAmount: amount,
+        }),
+      });
+      toast.success("Booking updated");
+      setShowEditDialog(false);
+      setEditingBooking(null);
+      await fetchBookings(bookingsQuery, { append: false, cursor: null });
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update booking");
+    } finally {
+      setUpdatingBooking(false);
+    }
+  }
+
+  async function handleDeleteBooking(booking: Booking) {
+    if (deletingBookingId) return;
+    if (!window.confirm("Delete this booking? This cannot be undone.")) return;
+    try {
+      setDeletingBookingId(booking.id);
+      await apiFetch(`/api/bookings/${booking.id}`, { method: "DELETE" });
+      toast.success("Booking deleted");
+      await fetchBookings(bookingsQuery, { append: false, cursor: null });
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete booking");
+    } finally {
+      setDeletingBookingId(null);
     }
   }
 
@@ -1023,20 +1116,20 @@ async function handleCreateBooking() {
                       </div>
 
                       <div className="flex justify-end gap-2 pt-2">
-                        <Button variant="outline" onClick={() => setShowNewGuest(false)}>
+                        <Button variant="outline" onClick={() => setShowNewGuest(false)} disabled={creatingGuest}>
                           Cancel
                         </Button>
-                        <Button onClick={createGuestAndSelect}>
+                        <Button onClick={createGuestAndSelect} disabled={creatingGuest}>
                           <UserPlus className="mr-2 h-4 w-4" />
-                          Create Guest
+                          {creatingGuest ? "Creating guest..." : "Create Guest"}
                         </Button>
                       </div>
                     </div>
                   </DialogContent>
                 </Dialog>
 
-                <Button onClick={handleCreateBooking} className="w-full" disabled={!isBookingFormValid}>
-                  Create Booking
+                <Button onClick={handleCreateBooking} className="w-full" disabled={!isBookingFormValid || creatingBooking}>
+                  {creatingBooking ? "Creating booking..." : "Create Booking"}
                 </Button>
                 {!isBookingFormValid && bookingSubmitAttempted ? (
                   <p className="text-xs text-red-600 text-center">Resolve form errors above to create booking.</p>
@@ -1093,6 +1186,8 @@ async function handleCreateBooking() {
         ) : bookings.map((b) => {
           const outstandingNum = Number(b.outstandingAmount ?? 0);
           const canPay = canTakePayment(b.paymentStatus) && (!Number.isFinite(outstandingNum) || outstandingNum > 0.009);
+          const canEditBooking = userRole === "ADMIN" || userRole === "MANAGER";
+          const canDeleteBooking = userRole === "ADMIN";
 
        const name =
   (b.guest?.fullName && b.guest.fullName.trim()) ||
@@ -1148,9 +1243,36 @@ const email =
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {canEditBooking ? (
+                      <Button
+                        variant="outline"
+                        disabled={updatingBooking || recordingPayment || creatingBooking || deletingBookingId === b.id}
+                        onClick={() => {
+                          setEditingBooking(b);
+                          setEditForm({
+                            checkIn: toDateInput(b.checkIn),
+                            checkOut: toDateInput(b.checkOut),
+                            totalAmount: String(b.totalAmount ?? ""),
+                          });
+                          setShowEditDialog(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    ) : null}
+                    {canDeleteBooking ? (
+                      <Button
+                        variant="outline"
+                        className="border-red-200 text-red-700 hover:bg-red-50"
+                        disabled={Boolean(deletingBookingId)}
+                        onClick={() => handleDeleteBooking(b)}
+                      >
+                        {deletingBookingId === b.id ? "Deleting..." : "Delete"}
+                      </Button>
+                    ) : null}
                     <Button
                       variant="outline"
-                      disabled={!canPay}
+                      disabled={!canPay || recordingPayment}
                       onClick={() => {
                         if (!canPay) return;
                         setSelectedBooking(b);
@@ -1227,7 +1349,49 @@ const email =
             </div>
 
             <Button onClick={handleRecordPayment} className="w-full">
-              Record Payment
+              {recordingPayment ? "Recording payment..." : "Record Payment"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Booking</DialogTitle>
+            <DialogDescription>
+              Update dates and total amount. Managers can edit only bookings in assigned properties.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label>Check-in date</Label>
+              <Input
+                type="date"
+                value={editForm.checkIn}
+                onChange={(e) => setEditForm((p) => ({ ...p, checkIn: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Check-out date</Label>
+              <Input
+                type="date"
+                value={editForm.checkOut}
+                onChange={(e) => setEditForm((p) => ({ ...p, checkOut: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Total amount (NGN)</Label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={editForm.totalAmount}
+                onChange={(e) => setEditForm((p) => ({ ...p, totalAmount: toMoneyString(e.target.value) }))}
+              />
+            </div>
+            <Button className="w-full" onClick={handleUpdateBooking} disabled={updatingBooking}>
+              {updatingBooking ? "Saving changes..." : "Save changes"}
             </Button>
           </div>
         </DialogContent>

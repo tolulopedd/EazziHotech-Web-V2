@@ -140,7 +140,13 @@ export default function CheckInPage() {
   const countToday = useMemo(() => todayBookings.length, [todayBookings]);
   const guestNameError = !checkInForm.guestName.trim() ? "Guest name is required." : "";
   const guestEmailError = !isValidEmail(checkInForm.guestEmail) ? "Enter a valid email address." : "";
-  const canSubmitCheckIn = Boolean(activeBooking) && !guestNameError && !guestEmailError && busyId !== activeBooking?.id;
+  const guestPhotoError = !guestPhotoBlob ? "Guest photo is required before check-in." : "";
+  const canSubmitCheckIn =
+    Boolean(activeBooking) &&
+    !guestNameError &&
+    !guestEmailError &&
+    !guestPhotoError &&
+    busyId !== activeBooking?.id;
   const linkedGuestId = activeBooking?.guestId || activeBooking?.guest?.id || "";
   const canUseWebCamera = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 
@@ -266,7 +272,7 @@ export default function CheckInPage() {
   async function submitCheckIn() {
     if (!activeBooking) return;
     setSubmitAttempted(true);
-    if (guestNameError || guestEmailError) {
+    if (guestNameError || guestEmailError || guestPhotoError) {
       setError("Please resolve check-in form errors.");
       return;
     }
@@ -826,6 +832,9 @@ export default function CheckInPage() {
         Selected photo will be compressed to ≤ 300KB.
         {guestPhotoSize ? ` Current: ${formatInteger(Math.round(guestPhotoSize / 1024))} KB` : ""}
       </p>
+      {submitAttempted && guestPhotoError ? (
+        <p className="text-xs text-red-600">{guestPhotoError}</p>
+      ) : null}
 
       {guestPhotoPreview ? (
         <Button

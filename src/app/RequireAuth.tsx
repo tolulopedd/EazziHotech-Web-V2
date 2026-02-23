@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Navigate, Outlet, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { clearAuthSession, getAccessToken } from "@/lib/api";
+import { clearAuthSession, getAccessToken, getTenantId } from "@/lib/api";
 import { emitLogout } from "@/lib/authEvents";
 
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -9,11 +9,12 @@ const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 export function RequireAuth() {
   const nav = useNavigate();
   const token = getAccessToken();
+  const tenantId = getTenantId();
   const timeoutRef = useRef<number | null>(null);
   const expiredRef = useRef(false);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !tenantId) return;
 
     const clearTimer = () => {
       if (timeoutRef.current) {
@@ -70,8 +71,8 @@ export function RequireAuth() {
       clearTimer();
       events.forEach((eventName) => window.removeEventListener(eventName, resetTimer));
     };
-  }, [nav, token]);
+  }, [nav, tenantId, token]);
 
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token || !tenantId) return <Navigate to="/login" replace />;
   return <Outlet />;
 }

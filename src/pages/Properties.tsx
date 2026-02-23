@@ -73,6 +73,13 @@ export default function Properties() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<"admin" | "manager" | "staff">("staff");
+  const [creatingProperty, setCreatingProperty] = useState(false);
+  const [creatingUnit, setCreatingUnit] = useState(false);
+  const [updatingProperty, setUpdatingProperty] = useState(false);
+  const [updatingUnit, setUpdatingUnit] = useState(false);
+  const [addingTenant, setAddingTenant] = useState(false);
+  const [deletingPropertyId, setDeletingPropertyId] = useState<string | null>(null);
+  const [deletingUnitId, setDeletingUnitId] = useState<string | null>(null);
 
   // Dialog states
   const [showPropertyDialog, setShowPropertyDialog] = useState(false);
@@ -278,12 +285,14 @@ export default function Properties() {
   }
 
   async function handleCreateProperty() {
+    if (creatingProperty) return;
     if (!propertyForm.name || !propertyForm.address || !propertyForm.type) {
       toast.error("Please fill all property fields");
       return;
     }
 
     try {
+      setCreatingProperty(true);
       const created = await apiFetch("/api/properties", {
         method: "POST",
         body: JSON.stringify(propertyForm),
@@ -301,10 +310,13 @@ export default function Properties() {
       }
     } catch (err: any) {
       toast.error(err?.message || "Failed to create property");
+    } finally {
+      setCreatingProperty(false);
     }
   }
 
   async function handleCreateUnit() {
+    if (creatingUnit) return;
     if (!selectedProperty) {
       toast.error("Please select a property");
       return;
@@ -325,6 +337,7 @@ export default function Properties() {
     const propertyId = selectedProperty.id;
 
     try {
+      setCreatingUnit(true);
       await apiFetch(`/api/properties/${propertyId}/units`, {
         method: "POST",
         body: JSON.stringify({
@@ -349,6 +362,8 @@ export default function Properties() {
       await fetchData();
     } catch (err: any) {
       toast.error(err?.message || "Failed to create unit");
+    } finally {
+      setCreatingUnit(false);
     }
   }
 
@@ -365,12 +380,14 @@ export default function Properties() {
   }
 
   async function handleUpdateProperty() {
+    if (updatingProperty) return;
     setEditPropertyAttempted(true);
     if (!editPropertyForm.id || !editPropertyValid) {
       toast.error(editPropertyNameError || "Please resolve validation errors.");
       return;
     }
     try {
+      setUpdatingProperty(true);
       await apiFetch(`/api/properties/${editPropertyForm.id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -385,6 +402,8 @@ export default function Properties() {
       if (selectedProperty?.id) await fetchPropertyUnits(selectedProperty.id);
     } catch (err: any) {
       toast.error(err?.message || "Failed to update property");
+    } finally {
+      setUpdatingProperty(false);
     }
   }
 
@@ -406,6 +425,7 @@ export default function Properties() {
   }
 
   async function handleUpdateUnit() {
+    if (updatingUnit) return;
     setEditUnitAttempted(true);
     if (!editUnitForm.id || !editUnitValid) {
       toast.error("Please resolve unit form validation errors.");
@@ -413,6 +433,7 @@ export default function Properties() {
     }
 
     try {
+      setUpdatingUnit(true);
       await apiFetch(`/api/units/${editUnitForm.id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -433,16 +454,20 @@ export default function Properties() {
       if (selectedProperty?.id) await fetchPropertyUnits(selectedProperty.id);
     } catch (err: any) {
       toast.error(err?.message || "Failed to update unit");
+    } finally {
+      setUpdatingUnit(false);
     }
   }
 
   async function handleAddTenant() {
+    if (addingTenant) return;
     if (!tenantForm.name || !tenantForm.email || !tenantForm.phone) {
       toast.error("Please fill all tenant fields");
       return;
     }
 
     try {
+      setAddingTenant(true);
       await apiFetch("/api/tenants", {
         method: "POST",
         body: JSON.stringify(tenantForm),
@@ -453,26 +478,34 @@ export default function Properties() {
       fetchData();
     } catch (err: any) {
       toast.error(err?.message || "Failed to add tenant");
+    } finally {
+      setAddingTenant(false);
     }
   }
 
   async function handleDeleteProperty(id: string) {
+    if (deletingPropertyId || deletingUnitId) return;
     if (!confirm("Are you sure? This action cannot be undone.")) return;
 
     try {
+      setDeletingPropertyId(id);
       await apiFetch(`/api/properties/${id}`, { method: "DELETE" });
       toast.success("Property deleted");
       await fetchData();
       await fetchAllUnits();
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete property");
+    } finally {
+      setDeletingPropertyId(null);
     }
   }
 
   async function handleDeleteUnit(propertyId: string, unitId: string) {
+    if (deletingPropertyId || deletingUnitId) return;
     if (!confirm("Are you sure? This action cannot be undone.")) return;
 
     try {
+      setDeletingUnitId(unitId);
       await apiFetch(`/api/properties/${propertyId}/units/${unitId}`, { method: "DELETE" });
       toast.success("Unit deleted");
 
@@ -481,6 +514,8 @@ export default function Properties() {
       await fetchData();
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete unit");
+    } finally {
+      setDeletingUnitId(null);
     }
   }
 
@@ -586,8 +621,8 @@ export default function Properties() {
                         <option value="SHORTLET">Shortlet</option>
                       </select>
                     </div>
-                    <Button onClick={handleCreateProperty} className="w-full">
-                      Create Property
+                    <Button onClick={handleCreateProperty} className="w-full" disabled={creatingProperty}>
+                      {creatingProperty ? "Creating property..." : "Create Property"}
                     </Button>
                   </div>
                 </DialogContent>
@@ -613,6 +648,8 @@ export default function Properties() {
                     onToggleUnits={() => togglePropertyUnits(property)}
                     canManage={canManageProperties}
                     canDelete={canDeleteProperties}
+                    deletingProperty={deletingPropertyId === property.id}
+                    actionLocked={Boolean(deletingPropertyId || deletingUnitId)}
                     onAddUnit={() => {
                       setSelectedProperty(property);
                       setShowUnitDialog(true);
@@ -631,6 +668,8 @@ export default function Properties() {
                             onDelete={() => handleDeleteUnit(property.id, unit.id)}
                             canManage={canManageProperties}
                             canDelete={canDeleteProperties}
+                            deletingUnit={deletingUnitId === unit.id}
+                            actionLocked={Boolean(deletingPropertyId || deletingUnitId)}
                           />
                         ))
                       ) : (
@@ -667,6 +706,8 @@ export default function Properties() {
                   onDelete={() => handleDeleteUnit(unit.propertyId, unit.id)}
                   canManage={canManageProperties}
                   canDelete={canDeleteProperties}
+                  deletingUnit={deletingUnitId === unit.id}
+                  actionLocked={Boolean(deletingPropertyId || deletingUnitId)}
                 />
               ))}
             </div>
@@ -729,8 +770,8 @@ export default function Properties() {
                       <option value="staff">Staff</option>
                     </select>
                   </div>
-                  <Button onClick={handleAddTenant} className="w-full">
-                    Add Team Member
+                  <Button onClick={handleAddTenant} className="w-full" disabled={addingTenant}>
+                    {addingTenant ? "Adding team member..." : "Add Team Member"}
                   </Button>
                 </div>
               </DialogContent>
@@ -798,8 +839,8 @@ export default function Properties() {
               />
             </div>
 
-            <Button onClick={handleCreateUnit} className="w-full">
-              Create Unit
+            <Button onClick={handleCreateUnit} className="w-full" disabled={creatingUnit}>
+              {creatingUnit ? "Creating unit..." : "Create Unit"}
             </Button>
           </div>
         </DialogContent>
@@ -847,8 +888,8 @@ export default function Properties() {
                 <option value="SHORTLET">Shortlet</option>
               </select>
             </div>
-            <Button onClick={handleUpdateProperty} className="w-full" disabled={!editPropertyValid}>
-              Save Changes
+            <Button onClick={handleUpdateProperty} className="w-full" disabled={!editPropertyValid || updatingProperty}>
+              {updatingProperty ? "Saving changes..." : "Save Changes"}
             </Button>
           </div>
         </DialogContent>
@@ -1000,8 +1041,8 @@ export default function Properties() {
               </div>
             </div>
 
-            <Button onClick={handleUpdateUnit} className="w-full" disabled={!editUnitValid}>
-              Save Unit Changes
+            <Button onClick={handleUpdateUnit} className="w-full" disabled={!editUnitValid || updatingUnit}>
+              {updatingUnit ? "Saving unit changes..." : "Save Unit Changes"}
             </Button>
           </div>
         </DialogContent>
@@ -1018,6 +1059,8 @@ function PropertyCard({
   onToggleUnits,
   canManage,
   canDelete,
+  deletingProperty,
+  actionLocked,
   onAddUnit,
 }: {
   property: Property;
@@ -1026,6 +1069,8 @@ function PropertyCard({
   onToggleUnits: () => void;
   canManage: boolean;
   canDelete: boolean;
+  deletingProperty: boolean;
+  actionLocked: boolean;
   onAddUnit: () => void;
 }) {
   return (
@@ -1041,14 +1086,14 @@ function PropertyCard({
           <div className="flex gap-2">
             {canManage && (
               <>
-                <button onClick={() => onEdit(property)} className="p-2 hover:bg-amber-50 rounded-lg transition">
+                <button onClick={() => onEdit(property)} disabled={actionLocked} className="p-2 hover:bg-amber-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
                   <Pencil className="h-4 w-4 text-amber-600" />
                 </button>
-                <button onClick={onAddUnit} className="p-2 hover:bg-indigo-50 rounded-lg transition">
+                <button onClick={onAddUnit} disabled={actionLocked} className="p-2 hover:bg-indigo-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
                   <Plus className="h-4 w-4 text-indigo-600" />
                 </button>
                 {canDelete ? (
-                  <button onClick={() => onDelete(property.id)} className="p-2 hover:bg-red-50 rounded-lg transition">
+                  <button onClick={() => onDelete(property.id)} disabled={actionLocked} className="p-2 hover:bg-red-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed" title={deletingProperty ? "Deleting property..." : "Delete property"}>
                     <Trash2 className="h-4 w-4 text-red-600" />
                   </button>
                 ) : null}
@@ -1093,12 +1138,16 @@ function UnitCard({
   onDelete,
   canManage,
   canDelete,
+  deletingUnit,
+  actionLocked,
 }: {
   unit: Unit;
   onEdit: () => void;
   onDelete: () => void;
   canManage: boolean;
   canDelete: boolean;
+  deletingUnit: boolean;
+  actionLocked: boolean;
 }) {
   const statusColors: Record<Unit["status"], string> = {
     available: "bg-green-100 text-green-800",
@@ -1139,12 +1188,12 @@ function UnitCard({
               {unit.status}
             </span>
             {canManage ? (
-              <button onClick={onEdit} className="p-2 hover:bg-amber-50 rounded-lg transition">
+              <button onClick={onEdit} disabled={actionLocked} className="p-2 hover:bg-amber-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
                 <Pencil className="h-4 w-4 text-amber-600" />
               </button>
             ) : null}
             {canDelete ? (
-              <button onClick={onDelete} className="p-2 hover:bg-red-50 rounded-lg transition">
+              <button onClick={onDelete} disabled={actionLocked} className="p-2 hover:bg-red-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed" title={deletingUnit ? "Deleting unit..." : "Delete unit"}>
                 <Trash2 className="h-4 w-4 text-red-600" />
               </button>
             ) : null}

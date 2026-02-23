@@ -8,11 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { formatNaira } from "@/lib/currency";
-import { formatDateTimeLagos, formatInteger } from "@/lib/format";
+import { formatDateLagos, formatDateTimeLagos, formatInteger } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   AlertCircle,
   Clipboard,
+  CalendarPlus2,
   DoorClosed,
   RefreshCcw,
   Search,
@@ -23,6 +27,7 @@ import {
 
 type Booking = {
   id: string;
+  unitId?: string;
   status: string;
   checkIn?: string | null;
   checkOut?: string | null;
@@ -46,6 +51,7 @@ type Booking = {
   guestPhotoUrl?: string | null;
 
   unit?: {
+    id?: string;
     name: string;
     type: "ROOM" | "APARTMENT";
     property?: { name: string };
@@ -105,6 +111,15 @@ export default function CheckOutPage() {
   const [visitorsLoading, setVisitorsLoading] = useState(false);
   const [visitorsError, setVisitorsError] = useState("");
   const [visitorBusyId, setVisitorBusyId] = useState<string | null>(null);
+  const [extendOpen, setExtendOpen] = useState(false);
+  const [extendBusy, setExtendBusy] = useState(false);
+  const [extendBooking, setExtendBooking] = useState<Booking | null>(null);
+  const [extendError, setExtendError] = useState("");
+  const [extendForm, setExtendForm] = useState({
+    newCheckOut: "",
+    notes: "",
+  });
+  const [extendBlockedRanges, setExtendBlockedRanges] = useState<Array<{ from: Date; to: Date }>>([]);
   const [visitorForm, setVisitorForm] = useState({
     fullName: "",
     phone: "",
@@ -219,6 +234,113 @@ export default function CheckOutPage() {
     });
     setVisitorOpen(true);
     void loadVisitors(b.id);
+  }
+
+  function dateInputValue(value?: string | null) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  async function openExtendModal(b: Booking) {
+    const current = b.checkOut ? new Date(b.checkOut) : new Date();
+    const suggested = new Date(current);
+    suggested.setDate(suggested.getDate() + 1);
+    setExtendBooking(b);
+    setExtendError("");
+    setExtendForm({
+      newCheckOut: dateInputValue(suggested.toISOString()),
+      notes: "",
+    });
+    setExtendBlockedRanges([]);
+    const unitId = b.unit?.id || b.unitId;
+    if (unitId) {
+      try {
+        const data = await apiFetch(`/api/bookings?unitId=${encodeURIComponent(unitId)}&activeOnly=1&limit=500`);
+        const rows = (data?.bookings ?? []) as Array<{ id: string; checkIn?: string; checkOut?: string }>;
+        const ranges = rows
+          .filter((x) => x.id !== b.id && x.checkIn && x.checkOut)
+          .map((x) => ({
+            from: new Date(String(x.checkIn)),
+            to: new Date(String(x.checkOut)),
+          }))
+          .filter((x) => !Number.isNaN(x.from.getTime()) && !Number.isNaN(x.to.getTime()));
+        setExtendBlockedRanges(ranges);
+      } catch {
+        // keep backend as source of truth; UI fallback still validates on submit.
+        setExtendBlockedRanges([]);
+      }
+    }
+    setExtendOpen(true);
+  }
+
+  function toMidnight(d: Date) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function isDateBlockedForExtension(date: Date) {
+    if (!extendBooking?.checkOut) return false;
+    const day = toMidnight(date).getTime();
+    const today = toMidnight(new Date()).getTime();
+    const currentCheckoutDay = toMidnight(new Date(extendBooking.checkOut)).getTime();
+
+    // past days and current/earlier checkout day are not valid extension targets
+    if (day <= today) return true;
+    if (day <= currentCheckoutDay) return true;
+
+    // disable dates falling inside existing active bookings on same unit
+    return extendBlockedRanges.some((r) => {
+      const from = toMidnight(r.from).getTime();
+      // booking checkOut is exclusive; date strictly before checkout day is blocked
+      const toExclusive = toMidnight(r.to).getTime();
+      return day >= from && day < toExclusive;
+    });
+  }
+
+  async function submitExtendStay() {
+    if (!extendBooking) return;
+    if (!extendForm.newCheckOut) {
+      setExtendError("Select a new check-out date.");
+      return;
+    }
+
+    const nextCheckout = new Date(`${extendForm.newCheckOut}T12:00:00.000Z`);
+    if (Number.isNaN(nextCheckout.getTime())) {
+      setExtendError("Invalid date selected.");
+      return;
+    }
+    if (extendBooking.checkOut && nextCheckout <= new Date(extendBooking.checkOut)) {
+      setExtendError("New check-out date must be after current check-out.");
+      return;
+    }
+
+    setExtendBusy(true);
+    setExtendError("");
+    try {
+      const data = await apiFetch(`/api/bookings/${extendBooking.id}/extend-stay`, {
+        method: "POST",
+        body: JSON.stringify({
+          newCheckOut: nextCheckout.toISOString(),
+          notes: extendForm.notes || null,
+        }),
+      });
+
+      const amount = Number(data?.extension?.extensionAmount ?? 0);
+      toast.success(
+        `Stay extended successfully${amount > 0 ? ` (${formatNaira(amount)} added)` : ""}`
+      );
+      setExtendOpen(false);
+      setExtendBooking(null);
+      await loadInHouse(q);
+    } catch (e: unknown) {
+      setExtendError(getErrorMessage(e, "Failed to extend stay"));
+    } finally {
+      setExtendBusy(false);
+    }
   }
 
   async function loadVisitors(bookingId: string) {
@@ -687,6 +809,11 @@ export default function CheckOutPage() {
                         Log Visitor
                       </Button>
 
+                      <Button variant="outline" onClick={() => openExtendModal(b)} disabled={isBusy}>
+                        <CalendarPlus2 className="mr-2 h-4 w-4" />
+                        Extend Stay
+                      </Button>
+
                       <Button onClick={() => openCheckOutModal(b)} disabled={isBusy}>
                         {isBusy ? (
                           <>
@@ -1083,6 +1210,101 @@ export default function CheckOutPage() {
             {!canSubmitCheckout ? (
               <p className="text-xs text-amber-700">Please tick both certifications before you can check-out.</p>
             ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* STAY EXTENSION MODAL */}
+      <Dialog
+        open={extendOpen}
+        onOpenChange={(open: boolean) => {
+          setExtendOpen(open);
+          if (!open) {
+            setExtendError("");
+            setExtendBusy(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus2 className="h-5 w-5 text-indigo-600" />
+              Extend Stay
+            </DialogTitle>
+            <DialogDescription>
+              Extend an in-house guest stay. Extension is allowed only if future dates are available.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {extendBooking ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p className="font-medium text-slate-900">{displayGuestName(extendBooking)}</p>
+                <p className="text-muted-foreground mt-1">
+                  Current check-out:{" "}
+                  <span className="font-medium text-slate-800">
+                    {extendBooking.checkOut ? formatDateTimeLagos(extendBooking.checkOut) : "n/a"}
+                  </span>
+                </p>
+              </div>
+            ) : null}
+
+            {extendError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-sm font-medium text-red-700">{extendError}</p>
+              </div>
+            ) : null}
+
+            <div className="space-y-2">
+              <Label>New check-out date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={cn("w-full justify-start text-left font-normal", !extendForm.newCheckOut && "text-muted-foreground")}
+                  >
+                    {extendForm.newCheckOut ? formatDateLagos(extendForm.newCheckOut) : "Select new check-out date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={extendForm.newCheckOut ? new Date(`${extendForm.newCheckOut}T12:00:00`) : undefined}
+                    onSelect={(d) => {
+                      if (!d) return;
+                      const yyyy = d.getFullYear();
+                      const mm = String(d.getMonth() + 1).padStart(2, "0");
+                      const dd = String(d.getDate()).padStart(2, "0");
+                      setExtendForm((p) => ({ ...p, newCheckOut: `${yyyy}-${mm}-${dd}` }));
+                    }}
+                    disabled={isDateBlockedForExtension}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                Past dates and already-booked dates are disabled.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Input
+                value={extendForm.notes}
+                onChange={(e) => setExtendForm((p) => ({ ...p, notes: e.target.value }))}
+                placeholder="Reason for extension..."
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setExtendOpen(false)} disabled={extendBusy}>
+                Cancel
+              </Button>
+              <Button onClick={submitExtendStay} disabled={extendBusy}>
+                {extendBusy ? "Extending..." : "Confirm Extension"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
