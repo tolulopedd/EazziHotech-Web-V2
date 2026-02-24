@@ -122,6 +122,7 @@ export default function Payments() {
   const [collectOpen, setCollectOpen] = useState(false);
   const [selectedPending, setSelectedPending] = useState<PendingItem | null>(null);
   const [collecting, setCollecting] = useState(false);
+  const [allowZeroPayment, setAllowZeroPayment] = useState(false);
   const [collectSubmitAttempted, setCollectSubmitAttempted] = useState(false);
   const [collectTouched, setCollectTouched] = useState<Record<CollectField, boolean>>({
     amount: false,
@@ -145,8 +146,10 @@ export default function Payments() {
     const amtNum = toNumberSafe(amt);
     const ref = collectForm.reference.trim();
 
-    if (!amt || !Number.isFinite(amtNum) || amtNum <= 0) {
-      next.amount = "Enter a valid amount greater than 0.";
+    if (!amt || !Number.isFinite(amtNum) || amtNum < 0 || (!allowZeroPayment && amtNum <= 0)) {
+      next.amount = allowZeroPayment
+        ? "Enter a valid amount (0 or greater)."
+        : "Enter a valid amount greater than 0.";
     } else if (Number.isFinite(selectedOutstandingNum) && amtNum > selectedOutstandingNum + 0.009) {
       next.amount = "Amount cannot exceed outstanding balance.";
     }
@@ -156,7 +159,7 @@ export default function Payments() {
     }
 
     return next;
-  }, [collectForm.amount, collectForm.reference, selectedOutstandingNum]);
+  }, [allowZeroPayment, collectForm.amount, collectForm.reference, selectedOutstandingNum]);
 
   const isCollectFormValid = Object.keys(collectErrors).length === 0;
   const showCollectError = (field: CollectField) =>
@@ -164,8 +167,19 @@ export default function Payments() {
 
   useEffect(() => {
     fetchData();
+    void loadTenantPolicy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  async function loadTenantPolicy() {
+    try {
+      const data = await apiFetch("/api/tenant");
+      const minDeposit = Number(data?.settings?.minDepositPercent ?? 100);
+      setAllowZeroPayment(Number.isFinite(minDeposit) && minDeposit === 0);
+    } catch {
+      setAllowZeroPayment(false);
+    }
+  }
 
   async function fetchData() {
     try {
@@ -500,6 +514,9 @@ export default function Payments() {
                 />
                 {showCollectError("amount") ? (
                   <p className="text-xs text-red-600">{collectErrors.amount}</p>
+                ) : null}
+                {!showCollectError("amount") && allowZeroPayment ? (
+                  <p className="text-xs text-muted-foreground">Zero amount is allowed because min deposit is set to 0%.</p>
                 ) : null}
               </div>
 

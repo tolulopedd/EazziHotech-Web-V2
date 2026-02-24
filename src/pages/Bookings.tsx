@@ -278,6 +278,7 @@ export default function Bookings() {
   });
 
   const [unitMap, setUnitMap] = useState<Record<string, string>>({});
+  const [allowZeroPayment, setAllowZeroPayment] = useState(false);
 
   // Derived: selected unit, nights, totalAmount
   const selectedUnit = useMemo(() => units.find((u) => u.id === selectedUnitId), [units, selectedUnitId]);
@@ -351,6 +352,7 @@ export default function Bookings() {
   useEffect(() => {
     fetchBookings("", { append: false, cursor: null });
     fetchProperties();
+    void loadTenantPolicy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -464,6 +466,16 @@ export default function Bookings() {
       hydrateUnitMapFromAllProperties(propsList);
     } catch (e: any) {
       toast.error(e?.message || "Failed to load properties");
+    }
+  }
+
+  async function loadTenantPolicy() {
+    try {
+      const data = await apiFetch("/api/tenant");
+      const minDeposit = Number(data?.settings?.minDepositPercent ?? 100);
+      setAllowZeroPayment(Number.isFinite(minDeposit) && minDeposit === 0);
+    } catch {
+      setAllowZeroPayment(false);
     }
   }
 
@@ -653,8 +665,8 @@ async function handleCreateBooking() {
     const amt = toMoneyString(paymentForm.amount);
     const amtNum = toNumberSafe(amt);
 
-    if (!amt || !Number.isFinite(amtNum) || amtNum <= 0) {
-      toast.error("Enter a valid amount greater than 0.");
+    if (!amt || !Number.isFinite(amtNum) || amtNum < 0 || (!allowZeroPayment && amtNum <= 0)) {
+      toast.error(allowZeroPayment ? "Enter a valid amount (0 or greater)." : "Enter a valid amount greater than 0.");
       return;
     }
 
@@ -1316,7 +1328,9 @@ const email =
             <div>
               <Label>
                 Amount{" "}
-                <span className="text-xs font-normal text-muted-foreground">(Partial deposit or Full payment)</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  (Partial deposit or Full payment{allowZeroPayment ? " • 0 allowed by policy" : ""})
+                </span>
               </Label>
               <Input
                 type="text"

@@ -83,8 +83,9 @@ const companyInfo = {
   name: "MyEazzi Solution Limited",
   address: "5B Block 1, Saphirre Lane, Howston Wright Estate, Oregun, Ikeja, Lagos",
   phone: "+234-905-2222-022",
-  websiteLabel: "www.eazzihotech.com",
-  websiteHref: "https://www.eazzihotech.com",
+  websiteLabel: "app.eazzihotech.com",
+  websiteHref: "https://app.eazzihotech.com",
+  infoEmail: "info@eazzihotech.com",
   supportEmail: "support@eazzihotech.com",
   businessHours: "8:00am to 5:00pm Monday to Friday",
   supportHours: "24-hour support",
@@ -599,6 +600,12 @@ export default function Landing() {
                 <Globe className="h-4 w-4 text-indigo-600" />
                 <a className="underline" href={companyInfo.websiteHref} target="_blank" rel="noopener noreferrer">
                   {companyInfo.websiteLabel}
+                </a>
+              </div>
+              <div className="flex items-center gap-2 text-slate-700">
+                <Globe className="h-4 w-4 text-indigo-600" />
+                <a className="underline" href={`mailto:${companyInfo.infoEmail}`}>
+                  {companyInfo.infoEmail}
                 </a>
               </div>
             </div>
