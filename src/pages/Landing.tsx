@@ -168,6 +168,21 @@ function validateLeadForm(form: LeadForm): LeadErrors {
   return errors;
 }
 
+function WhatsAppLogo({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true" className={className}>
+      <path
+        fill="#25D366"
+        d="M16.003 3.2c-7.063 0-12.8 5.737-12.8 12.8 0 2.245.586 4.434 1.697 6.364L3.2 28.8l6.604-1.675a12.746 12.746 0 0 0 6.2 1.606h.005c7.062 0 12.791-5.737 12.791-12.8 0-3.422-1.333-6.64-3.754-9.06A12.73 12.73 0 0 0 16.003 3.2z"
+      />
+      <path
+        fill="#fff"
+        d="M23.59 19.07c-.414-.207-2.45-1.208-2.83-1.346-.38-.138-.657-.207-.934.207-.276.414-1.07 1.346-1.312 1.622-.242.276-.483.31-.897.104-.414-.207-1.748-.644-3.33-2.053-1.23-1.096-2.06-2.449-2.301-2.863-.242-.414-.026-.638.18-.844.185-.184.414-.483.621-.725.207-.241.276-.414.414-.69.138-.276.069-.518-.035-.725-.103-.207-.932-2.25-1.276-3.08-.335-.804-.675-.695-.934-.708l-.794-.014c-.276 0-.725.103-1.104.518-.38.414-1.45 1.415-1.45 3.45 0 2.036 1.484 4 1.691 4.276.207.276 2.922 4.46 7.079 6.251.988.426 1.759.68 2.36.87.991.315 1.893.271 2.606.164.795-.118 2.45-1 2.796-1.967.345-.966.345-1.794.241-1.966-.103-.173-.379-.276-.793-.483z"
+      />
+    </svg>
+  );
+}
+
 export default function Landing() {
   const nav = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -406,7 +421,7 @@ export default function Landing() {
               <CircleDot className="h-3 w-3" /> Modern Operating System for Hotels & Shortlets
             </div>
             <h1 className="text-4xl font-extrabold tracking-tight md:text-6xl">
-              Product-ready platform for operations, payments, and guest experience.
+              All-in-One Hotel & Shortlet Management Software for better Guest Experience.
             </h1>
             <p className="text-lg text-slate-600">
               EazziHotech helps operators move faster with clean workflows, tenant isolation, and a modern sales-ready
@@ -551,7 +566,10 @@ export default function Landing() {
           ))}
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Button onClick={openWhatsAppAI}>Start Sales Chat (WhatsApp)</Button>
+          <Button onClick={openWhatsAppAI}>
+            <WhatsAppLogo className="mr-2 h-4 w-4" />
+            Chat with us (WhatsApp)
+          </Button>
           <Button
             variant="outline"
             onClick={() => {
@@ -696,7 +714,7 @@ export default function Landing() {
 
               <div className="md:col-span-2">
                 <Button type="submit" disabled={leadSubmitting}>
-                  {leadSubmitting ? "Submitting..." : "Submit Lead"}
+                  {leadSubmitting ? "Submitting..." : "Submit"}
                 </Button>
               </div>
             </form>
@@ -705,11 +723,10 @@ export default function Landing() {
       </section>
 
       <footer className="border-t border-slate-200 bg-white/90">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-8 md:flex-row md:items-center md:justify-between">
-          <div className="text-sm text-slate-600">
+        <div className="mx-auto flex max-w-6xl items-center justify-center px-4 py-8">
+          <div className="text-center text-sm text-slate-600">
             © {new Date().getFullYear()} {companyInfo.name}. All rights reserved.
           </div>
-          <div className="text-sm text-slate-500">Product live and ready for tenant onboarding.</div>
         </div>
       </footer>
     </div>

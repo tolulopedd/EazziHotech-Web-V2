@@ -95,6 +95,7 @@ function formatMaybeNGN(value: string | number | null | undefined) {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const LAGOS_TZ = "Africa/Lagos";
+const BOOKING_BACKDATE_DAYS_ALLOWED = 1;
 const lagosDateFmt = new Intl.DateTimeFormat("en-CA", {
   timeZone: LAGOS_TZ,
   year: "numeric",
@@ -884,7 +885,7 @@ async function handleCreateBooking() {
                     Dates{" "}
                     <p className="text-xs text-slate-400">
                       First click sets check-in, second click sets check-out. Unavailable dates already booked are
-                      blocked.
+                      blocked. Check-in can be backdated by up to 1 day for overnight walk-in capture.
                     </p>
                   </Label>
 
@@ -918,8 +919,9 @@ async function handleCreateBooking() {
                         numberOfMonths={2}
                         disabled={(date) => {
                           const today = lagosDayNumber(new Date());
+                          const earliestAllowed = today - BOOKING_BACKDATE_DAYS_ALLOWED;
                           const d = lagosDayNumber(date);
-                          if (d < today) return true;
+                          if (d < earliestAllowed) return true;
                           if (!range?.from || range?.to) {
                             return isDateBooked(date);
                           }

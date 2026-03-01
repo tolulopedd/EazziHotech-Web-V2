@@ -24,6 +24,9 @@ type Tenant = {
   phone?: string | null;
   address?: string | null;
   settings?: TenantSettings | null;
+  propertiesCount?: number | null;
+  unitsCount?: number | null;
+  usersCount?: number | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -354,6 +357,17 @@ export default function Settings() {
     () => platformTenants.find((t) => t.id === selectedPlatformTenantId) || null,
     [platformTenants, selectedPlatformTenantId]
   );
+
+  useEffect(() => {
+    if (!isSuperAdmin || !selectedPlatformTenant) return;
+    setUsage({
+      propertiesCount: Number(selectedPlatformTenant.propertiesCount ?? 0),
+      unitsCount: Number(selectedPlatformTenant.unitsCount ?? 0),
+      usersCount: Number(selectedPlatformTenant.usersCount ?? 0),
+      canViewUnits: true,
+      canViewUsers: true,
+    });
+  }, [isSuperAdmin, selectedPlatformTenant]);
 
   const effectiveSettings = useMemo(() => {
     if (isSuperAdmin) return selectedPlatformTenant?.settings || null;
