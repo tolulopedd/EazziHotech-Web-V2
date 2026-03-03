@@ -48,6 +48,26 @@ type Guest = {
   idNumber?: string | null;
 };
 
+type PreBooking = {
+  id: string;
+  guestId?: string;
+  guestName: string;
+  guestEmail?: string | null;
+  guestPhone?: string | null;
+  guest?: {
+    id: string;
+    fullName: string;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
+  plannedCheckIn?: string | null;
+  plannedCheckOut?: string | null;
+  amountPaid: string;
+  currency?: string;
+  status: "PENDING" | "PAID" | "CANCELLED" | "CONVERTED";
+  createdAt: string;
+};
+
 interface Booking {
   id: string;
   unitId: string;
@@ -81,7 +101,7 @@ interface Booking {
 
 type Role = "ADMIN" | "MANAGER" | "STAFF";
 
-type BookingFormField = "property" | "unit" | "dates" | "guest" | "total";
+type BookingFormField = "property" | "unit" | "dates" | "guest" | "preBooking" | "total";
 type BookingFormErrors = Partial<Record<BookingFormField, string>>;
 
 function formatMaybeNGN(value: string | number | null | undefined) {
@@ -221,6 +241,7 @@ export default function Bookings() {
   const searchDebounceRef = useRef<number | null>(null);
 
   const [showBookingDialog, setShowBookingDialog] = useState(false);
+  const [showPreBookingDialog, setShowPreBookingDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -240,6 +261,29 @@ export default function Bookings() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [selectedUnitId, setSelectedUnitId] = useState("");
+  const [bookingMode, setBookingMode] = useState<"NEW" | "PREBOOKING">("NEW");
+  const [preBookings, setPreBookings] = useState<PreBooking[]>([]);
+  const [selectedPreBookingId, setSelectedPreBookingId] = useState("");
+  const [creatingPreBooking, setCreatingPreBooking] = useState(false);
+  const [preBookingForm, setPreBookingForm] = useState({
+    plannedCheckIn: "",
+    plannedCheckOut: "",
+    amountPaid: "",
+    notes: "",
+  });
+  const [preGuestQuery, setPreGuestQuery] = useState("");
+  const [preGuestResults, setPreGuestResults] = useState<Guest[]>([]);
+  const [preGuestSearching, setPreGuestSearching] = useState(false);
+  const [selectedPreGuest, setSelectedPreGuest] = useState<Guest | null>(null);
+  const preGuestSearchTimer = useRef<number | null>(null);
+  const [showPreNewGuest, setShowPreNewGuest] = useState(false);
+  const [preNewGuestForm, setPreNewGuestForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    idNumber: "",
+  });
+  const [creatingPreGuest, setCreatingPreGuest] = useState(false);
 
   const [range, setRange] = useState<DateRange | undefined>();
   const [unitBookings, setUnitBookings] = useState<Booking[]>([]);
@@ -268,6 +312,7 @@ export default function Bookings() {
     unit: false,
     dates: false,
     guest: false,
+    preBooking: false,
     total: false,
   });
 
@@ -280,9 +325,14 @@ export default function Bookings() {
 
   const [unitMap, setUnitMap] = useState<Record<string, string>>({});
   const [allowZeroPayment, setAllowZeroPayment] = useState(false);
+  const lastPricingKeyRef = useRef<string>("");
 
   // Derived: selected unit, nights, totalAmount
   const selectedUnit = useMemo(() => units.find((u) => u.id === selectedUnitId), [units, selectedUnitId]);
+  const selectedPreBooking = useMemo(
+    () => preBookings.find((p) => p.id === selectedPreBookingId) ?? null,
+    [preBookings, selectedPreBookingId]
+  );
 
   const nights = useMemo(() => {
     if (!range?.from || !range?.to) return 0;
@@ -293,6 +343,11 @@ export default function Bookings() {
     if (!selectedUnit || !range?.from || !range?.to) return null;
     return bookingTotalForUnit(selectedUnit, range.from, range.to);
   }, [selectedUnit, range?.from, range?.to, nights]);
+
+  const pricingKey = useMemo(() => {
+    if (!selectedUnitId || !range?.from || !range?.to) return "";
+    return `${selectedUnitId}|${lagosDayNumber(range.from)}|${lagosDayNumber(range.to)}`;
+  }, [selectedUnitId, range?.from, range?.to]);
 
   const hasDateRangeOverlap = useMemo(() => {
     if (!range?.from || !range?.to) return false;
@@ -320,7 +375,11 @@ export default function Bookings() {
       next.dates = "Selected dates conflict with an existing booking for this unit.";
     }
 
-    if (!selectedGuest?.id) next.guest = "Select an existing guest or create a new one.";
+    if (bookingMode === "PREBOOKING") {
+      if (!selectedPreBookingId) next.preBooking = "Select a pre-booking.";
+    } else if (!selectedGuest?.id) {
+      next.guest = "Select an existing guest or create a new one.";
+    }
 
     const effectiveTotal = editableTotal || totalAmount || "";
     const totalNum = toNumberSafe(String(effectiveTotal));
@@ -338,6 +397,8 @@ export default function Bookings() {
     range?.to,
     nights,
     hasDateRangeOverlap,
+    bookingMode,
+    selectedPreBookingId,
     selectedGuest?.id,
     editableTotal,
     totalAmount,
@@ -353,6 +414,7 @@ export default function Bookings() {
   useEffect(() => {
     fetchBookings("", { append: false, cursor: null });
     fetchProperties();
+    fetchPreBookings();
     void loadTenantPolicy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -395,6 +457,20 @@ export default function Bookings() {
     if (!totalTouched) setEditableTotal(String(totalAmount));
   }, [totalAmount, totalTouched]);
 
+  // Keep booking amount aligned with computed unit/date pricing.
+  // Manual override is only kept for the current exact unit+date selection.
+  useEffect(() => {
+    if (!pricingKey) {
+      lastPricingKeyRef.current = "";
+      return;
+    }
+    if (lastPricingKeyRef.current !== pricingKey) {
+      lastPricingKeyRef.current = pricingKey;
+      setTotalTouched(false);
+      if (totalAmount) setEditableTotal(String(totalAmount));
+    }
+  }, [pricingKey, totalAmount]);
+
   // ✅ Guest search with debounce
   useEffect(() => {
     const q = guestQuery.trim();
@@ -425,6 +501,36 @@ export default function Bookings() {
       if (guestSearchTimer.current) window.clearTimeout(guestSearchTimer.current);
     };
   }, [guestQuery, showBookingDialog]);
+
+  // ✅ Pre-booking guest search with debounce
+  useEffect(() => {
+    const q = preGuestQuery.trim();
+    if (!showPreBookingDialog) return;
+
+    if (preGuestSearchTimer.current) window.clearTimeout(preGuestSearchTimer.current);
+
+    if (!q) {
+      setPreGuestResults([]);
+      setPreGuestSearching(false);
+      return;
+    }
+
+    preGuestSearchTimer.current = window.setTimeout(async () => {
+      try {
+        setPreGuestSearching(true);
+        const data = await apiFetch(`/api/guests?q=${encodeURIComponent(q)}`);
+        setPreGuestResults((data?.guests ?? data?.items ?? []) as Guest[]);
+      } catch {
+        setPreGuestResults([]);
+      } finally {
+        setPreGuestSearching(false);
+      }
+    }, 250);
+
+    return () => {
+      if (preGuestSearchTimer.current) window.clearTimeout(preGuestSearchTimer.current);
+    };
+  }, [preGuestQuery, showPreBookingDialog]);
 
   /* ================= API ================= */
 
@@ -467,6 +573,17 @@ export default function Bookings() {
       hydrateUnitMapFromAllProperties(propsList);
     } catch (e: any) {
       toast.error(e?.message || "Failed to load properties");
+    }
+  }
+
+  async function fetchPreBookings() {
+    try {
+      const data = await apiFetch("/api/prebookings?limit=200");
+      const rows = (data?.preBookings ?? []) as PreBooking[];
+      setPreBookings(rows.filter((x) => x.status === "PENDING" || x.status === "PAID"));
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load pre-bookings");
+      setPreBookings([]);
     }
   }
 
@@ -580,6 +697,106 @@ export default function Bookings() {
     }
   }
 
+  async function createPreGuestAndSelect() {
+    const fullName = preNewGuestForm.fullName.trim();
+    const phone = preNewGuestForm.phone.trim();
+    const email = preNewGuestForm.email.trim();
+    const idNumber = preNewGuestForm.idNumber.trim();
+
+    if (!fullName) {
+      toast.error("Guest full name is required");
+      return;
+    }
+
+    try {
+      setCreatingPreGuest(true);
+      const data = await apiFetch("/api/guests", {
+        method: "POST",
+        body: JSON.stringify({
+          fullName,
+          phone: phone || null,
+          email: email || null,
+          idNumber: idNumber || null,
+        }),
+      });
+
+      const g = (data?.guest ?? data) as Guest;
+      if (!g?.id) throw new Error("Guest not created");
+
+      setSelectedPreGuest(g);
+      setPreGuestQuery(`${g.fullName}${g.phone ? ` • ${g.phone}` : ""}`);
+      setPreGuestResults([]);
+      setShowPreNewGuest(false);
+      setPreNewGuestForm({ fullName: "", email: "", phone: "", idNumber: "" });
+      toast.success("Guest created");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to create guest");
+    } finally {
+      setCreatingPreGuest(false);
+    }
+  }
+
+  async function handleCreatePreBooking() {
+    if (creatingPreBooking) return;
+    const amountPaid = toMoneyString(preBookingForm.amountPaid);
+    if (!selectedPreGuest?.id) {
+      toast.error("Select an existing guest or create a new guest.");
+      return;
+    }
+    if (!preBookingForm.plannedCheckIn || !preBookingForm.plannedCheckOut) {
+      toast.error("Planned check-in and check-out are required.");
+      return;
+    }
+    const amountNum = toNumberSafe(amountPaid || "0");
+    if (!Number.isFinite(amountNum) || amountNum < 0) {
+      toast.error("Amount paid must be 0 or greater.");
+      return;
+    }
+    if (
+      preBookingForm.plannedCheckIn &&
+      preBookingForm.plannedCheckOut &&
+      new Date(`${preBookingForm.plannedCheckOut}T12:00:00`).getTime() <=
+        new Date(`${preBookingForm.plannedCheckIn}T12:00:00`).getTime()
+    ) {
+      toast.error("Planned check-out must be after planned check-in.");
+      return;
+    }
+
+    try {
+      setCreatingPreBooking(true);
+      const data = await apiFetch("/api/prebookings", {
+        method: "POST",
+        body: JSON.stringify({
+          guestId: selectedPreGuest.id,
+          plannedCheckIn: `${preBookingForm.plannedCheckIn}T12:00:00.000Z`,
+          plannedCheckOut: `${preBookingForm.plannedCheckOut}T12:00:00.000Z`,
+          amountPaid: money2(amountNum),
+          currency: "NGN",
+          notes: preBookingForm.notes.trim() || null,
+        }),
+      });
+
+      const created = data?.preBooking as PreBooking | undefined;
+      if (!created?.id) throw new Error("Pre-booking was not created.");
+      toast.success("Pre-booking created.");
+      setShowPreBookingDialog(false);
+      setPreBookingForm({
+        plannedCheckIn: "",
+        plannedCheckOut: "",
+        amountPaid: "",
+        notes: "",
+      });
+      setSelectedPreGuest(null);
+      setPreGuestQuery("");
+      setPreGuestResults([]);
+      await fetchPreBookings();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to create pre-booking.");
+    } finally {
+      setCreatingPreBooking(false);
+    }
+  }
+
   /* ================= CREATE BOOKING ================= */
 
 async function handleCreateBooking() {
@@ -592,7 +809,9 @@ async function handleCreateBooking() {
   const checkInDate = range?.from;
   const checkOutDate = range?.to;
   const guestId = selectedGuest?.id;
-  if (!checkInDate || !checkOutDate || !guestId) return;
+  if (!checkInDate || !checkOutDate) return;
+  if (bookingMode === "NEW" && !guestId) return;
+  if (bookingMode === "PREBOOKING" && !selectedPreBookingId) return;
 
   const finalTotal = editableTotal ? money2(toNumberSafe(editableTotal)) : String(totalAmount ?? "");
   const finalNum = toNumberSafe(finalTotal);
@@ -604,22 +823,33 @@ async function handleCreateBooking() {
 
   try {
     setCreatingBooking(true);
-    await apiFetch("/api/bookings", {
-      method: "POST",
-      body: JSON.stringify({
-        unitId: selectedUnitId,
-        checkIn: toNoonISO(checkInDate),
-        checkOut: toNoonISO(checkOutDate),
+    if (bookingMode === "PREBOOKING") {
+      await apiFetch(`/api/prebookings/${selectedPreBookingId}/convert`, {
+        method: "POST",
+        body: JSON.stringify({
+          unitId: selectedUnitId,
+          checkIn: toNoonISO(checkInDate),
+          checkOut: toNoonISO(checkOutDate),
+          totalAmount: finalTotal,
+          currency: "NGN",
+        }),
+      });
+      toast.success("Pre-booking converted to booking");
+    } else {
+      await apiFetch("/api/bookings", {
+        method: "POST",
+        body: JSON.stringify({
+          unitId: selectedUnitId,
+          checkIn: toNoonISO(checkInDate),
+          checkOut: toNoonISO(checkOutDate),
+          guestId,
+          totalAmount: finalTotal,
+          currency: "NGN",
+        }),
+      });
+      toast.success("Booking created");
+    }
 
-        // ✅ link guest
-        guestId,
-
-        totalAmount: finalTotal,
-        currency: "NGN",
-      }),
-    });
-
-    toast.success("Booking created");
     setShowBookingDialog(false);
 
     // ✅ reset form
@@ -636,8 +866,11 @@ async function handleCreateBooking() {
       unit: false,
       dates: false,
       guest: false,
+      preBooking: false,
       total: false,
     });
+    setBookingMode("NEW");
+    setSelectedPreBookingId("");
 
     setGuestQuery("");
     setGuestResults([]);
@@ -645,6 +878,7 @@ async function handleCreateBooking() {
 
     // ✅ IMPORTANT: re-fetch so list includes guest object + name/email
     await fetchBookings("", { append: false, cursor: null });
+    await fetchPreBookings();
   } catch (e: any) {
     toast.error(e?.message || "Failed to create booking");
   } finally {
@@ -783,6 +1017,221 @@ async function handleCreateBooking() {
           </Button>
 
           <Dialog
+            open={showPreBookingDialog}
+            onOpenChange={(open) => {
+              setShowPreBookingDialog(open);
+              if (!open) {
+                setSelectedPreGuest(null);
+                setPreGuestQuery("");
+                setPreGuestResults([]);
+                setShowPreNewGuest(false);
+                setPreNewGuestForm({ fullName: "", email: "", phone: "", idNumber: "" });
+                setPreBookingForm({
+                  plannedCheckIn: "",
+                  plannedCheckOut: "",
+                  amountPaid: "",
+                  notes: "",
+                });
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Plus className="mr-2 h-4 w-4" />
+                New Pre-Booking
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Create Pre-Booking</DialogTitle>
+                <DialogDescription>
+                  Capture guest + advance payment before room assignment. Room will be selected at booking stage.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Guest</Label>
+                  {selectedPreGuest ? (
+                    <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold truncate">{selectedPreGuest.fullName}</p>
+                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                          {selectedPreGuest.phone ? `📞 ${selectedPreGuest.phone}` : "—"}{" "}
+                          {selectedPreGuest.email ? `• ✉️ ${selectedPreGuest.email}` : ""}
+                          {selectedPreGuest.idNumber ? ` • ID: ${selectedPreGuest.idNumber}` : ""}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedPreGuest(null);
+                          setPreGuestQuery("");
+                          setPreGuestResults([]);
+                        }}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Change
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          className="pl-9"
+                          placeholder="Search guest by name, phone, email, ID..."
+                          value={preGuestQuery}
+                          onChange={(e) => setPreGuestQuery(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setShowPreNewGuest(true);
+                            setPreNewGuestForm((p) => ({
+                              ...p,
+                              fullName: preGuestQuery.trim() || p.fullName,
+                            }));
+                          }}
+                        >
+                          <UserPlus className="mr-2 h-4 w-4" />
+                          New Guest
+                        </Button>
+                        {preGuestSearching ? <span className="text-xs text-muted-foreground">Searching…</span> : null}
+                      </div>
+                      {preGuestQuery.trim() && !preGuestSearching ? (
+                        preGuestResults.length > 0 ? (
+                          <div className="max-h-56 overflow-auto rounded-lg border border-slate-200">
+                            {preGuestResults.map((g) => (
+                              <button
+                                key={g.id}
+                                type="button"
+                                className="w-full text-left p-3 hover:bg-slate-50 border-b last:border-b-0"
+                                onClick={() => {
+                                  setSelectedPreGuest(g);
+                                  setPreGuestResults([]);
+                                }}
+                              >
+                                <p className="font-medium">{g.fullName}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {g.phone ? `📞 ${g.phone}` : "—"} {g.email ? `• ✉️ ${g.email}` : ""}{" "}
+                                  {g.idNumber ? `• ID: ${g.idNumber}` : ""}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            No matching guest. Click <b>New Guest</b> to create.
+                          </p>
+                        )
+                      ) : null}
+                    </>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Planned Check-in</Label>
+                    <Input
+                      type="date"
+                      value={preBookingForm.plannedCheckIn}
+                      onChange={(e) => setPreBookingForm((p) => ({ ...p, plannedCheckIn: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Planned Check-out</Label>
+                    <Input
+                      type="date"
+                      value={preBookingForm.plannedCheckOut}
+                      onChange={(e) => setPreBookingForm((p) => ({ ...p, plannedCheckOut: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Amount Paid (NGN)</Label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    value={preBookingForm.amountPaid}
+                    onChange={(e) => setPreBookingForm((p) => ({ ...p, amountPaid: toMoneyString(e.target.value) }))}
+                    placeholder="50000.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Notes (optional)</Label>
+                  <Input
+                    value={preBookingForm.notes}
+                    onChange={(e) => setPreBookingForm((p) => ({ ...p, notes: e.target.value }))}
+                    placeholder="Any instruction for this pre-booking"
+                  />
+                </div>
+                <Button onClick={handleCreatePreBooking} className="w-full" disabled={creatingPreBooking}>
+                  {creatingPreBooking ? "Creating pre-booking..." : "Create Pre-Booking"}
+                </Button>
+
+                <Dialog open={showPreNewGuest} onOpenChange={setShowPreNewGuest}>
+                  <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>Create Guest</DialogTitle>
+                      <DialogDescription>
+                        Add guest profile and assign it directly to this pre-booking.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label>Full Name</Label>
+                        <Input
+                          value={preNewGuestForm.fullName}
+                          onChange={(e) => setPreNewGuestForm((p) => ({ ...p, fullName: e.target.value }))}
+                          placeholder="John Doe"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Phone</Label>
+                          <Input
+                            value={preNewGuestForm.phone}
+                            onChange={(e) => setPreNewGuestForm((p) => ({ ...p, phone: e.target.value }))}
+                            placeholder="+234..."
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Email</Label>
+                          <Input
+                            value={preNewGuestForm.email}
+                            onChange={(e) => setPreNewGuestForm((p) => ({ ...p, email: e.target.value }))}
+                            placeholder="john@example.com"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>ID Number (optional)</Label>
+                        <Input
+                          value={preNewGuestForm.idNumber}
+                          onChange={(e) => setPreNewGuestForm((p) => ({ ...p, idNumber: e.target.value }))}
+                          placeholder="NIN / Passport / Driver’s license..."
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2 pt-2">
+                        <Button variant="outline" onClick={() => setShowPreNewGuest(false)} disabled={creatingPreGuest}>
+                          Cancel
+                        </Button>
+                        <Button onClick={createPreGuestAndSelect} disabled={creatingPreGuest}>
+                          <UserPlus className="mr-2 h-4 w-4" />
+                          {creatingPreGuest ? "Creating guest..." : "Create Guest"}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
             open={showBookingDialog}
             onOpenChange={(open) => {
               setShowBookingDialog(open);
@@ -793,6 +1242,7 @@ async function handleCreateBooking() {
                   unit: false,
                   dates: false,
                   guest: false,
+                  preBooking: false,
                   total: false,
                 });
                 setGuestQuery("");
@@ -800,6 +1250,16 @@ async function handleCreateBooking() {
                 setSelectedGuest(null);
                 setShowNewGuest(false);
                 setNewGuestForm({ fullName: "", email: "", phone: "", idNumber: "" });
+                setBookingMode("NEW");
+                setSelectedPreBookingId("");
+                setSelectedPropertyId("");
+                setUnits([]);
+                setSelectedUnitId("");
+                setRange(undefined);
+                setUnitBookings([]);
+                setEditableTotal("");
+                setTotalTouched(false);
+                lastPricingKeyRef.current = "";
               }
             }}
           >
@@ -819,6 +1279,73 @@ async function handleCreateBooking() {
               </DialogHeader>
 
               <div className="space-y-4">
+                <div className={bookingMode === "PREBOOKING" ? "grid grid-cols-1 md:grid-cols-2 gap-3" : ""}>
+                  <div className="space-y-2">
+                    <Label>Booking Source</Label>
+                    <select
+                      className="w-full h-11 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent bg-background"
+                      value={bookingMode}
+                      onChange={(e) => {
+                        const nextMode = e.target.value as "NEW" | "PREBOOKING";
+                        setBookingMode(nextMode);
+                        setBookingTouched((prev) => ({ ...prev, preBooking: true, guest: true }));
+                        setSelectedPreBookingId("");
+                        setSelectedGuest(null);
+                        setGuestQuery("");
+                        setGuestResults([]);
+                      }}
+                    >
+                      <option value="NEW">New booking</option>
+                      <option value="PREBOOKING">From pre-booking</option>
+                    </select>
+                  </div>
+
+                  {bookingMode === "PREBOOKING" ? (
+                    <div className="space-y-2">
+                      <Label>Pre-Booking</Label>
+                      <select
+                        className="w-full h-11 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent bg-background"
+                        value={selectedPreBookingId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setSelectedPreBookingId(id);
+                          setBookingTouched((prev) => ({ ...prev, preBooking: true }));
+                          const selected = preBookings.find((p) => p.id === id);
+                          if (selected?.plannedCheckIn && selected?.plannedCheckOut) {
+                            setRange({
+                              from: new Date(selected.plannedCheckIn),
+                              to: new Date(selected.plannedCheckOut),
+                            });
+                          }
+                        }}
+                      >
+                        <option value="">Select pre-booking</option>
+                        {preBookings.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.guestName} • {formatMaybeNGN(p.amountPaid)} • {p.id.slice(0, 8).toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                </div>
+                {bookingMode === "PREBOOKING" ? (
+                  <>
+                    {showFieldError("preBooking") ? (
+                      <p className="text-xs text-red-600">{bookingErrors.preBooking}</p>
+                    ) : null}
+                    {selectedPreBooking ? (
+                      <p className="text-xs text-muted-foreground">
+                        Pre-booked by {selectedPreBooking.guestName}
+                        {selectedPreBooking.guestPhone ? ` • ${selectedPreBooking.guestPhone}` : ""}
+                        {selectedPreBooking.guestEmail ? ` • ${selectedPreBooking.guestEmail}` : ""}
+                        {" • "}
+                        Paid: {formatMaybeNGN(selectedPreBooking.amountPaid)}
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
+
                 {/* Property */}
                 <div className="space-y-2">
                   <Label>Property</Label>
@@ -986,6 +1513,7 @@ async function handleCreateBooking() {
                 </div>
 
                 {/* ✅ Guest Selector */}
+                {bookingMode === "NEW" ? (
                 <div className="space-y-2">
                   <Label>Guest</Label>
 
@@ -1079,8 +1607,10 @@ async function handleCreateBooking() {
                     </>
                   )}
                 </div>
+                ) : null}
 
                 {/* ✅ Inline New Guest dialog (keeps Booking dialog open) */}
+                {bookingMode === "NEW" ? (
                 <Dialog open={showNewGuest} onOpenChange={setShowNewGuest}>
                   <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
@@ -1141,9 +1671,16 @@ async function handleCreateBooking() {
                     </div>
                   </DialogContent>
                 </Dialog>
+                ) : null}
 
                 <Button onClick={handleCreateBooking} className="w-full" disabled={!isBookingFormValid || creatingBooking}>
-                  {creatingBooking ? "Creating booking..." : "Create Booking"}
+                  {creatingBooking
+                    ? bookingMode === "PREBOOKING"
+                      ? "Converting pre-booking..."
+                      : "Creating booking..."
+                    : bookingMode === "PREBOOKING"
+                    ? "Convert to Booking"
+                    : "Create Booking"}
                 </Button>
                 {!isBookingFormValid && bookingSubmitAttempted ? (
                   <p className="text-xs text-red-600 text-center">Resolve form errors above to create booking.</p>
@@ -1186,6 +1723,37 @@ async function handleCreateBooking() {
               Clear
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* PRE-BOOKINGS LIST */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Pending Pre-Bookings/Reservations</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {preBookings.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No pending pre-bookings.</p>
+          ) : (
+            preBookings.map((p) => (
+              <div key={p.id} className="rounded-md border border-slate-200 p-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{p.guestName}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    Ref: {p.id.slice(0, 8).toUpperCase()}
+                    {p.guestPhone ? ` • ${p.guestPhone}` : ""}
+                    {p.guestEmail ? ` • ${p.guestEmail}` : ""}
+                    {p.plannedCheckIn ? ` • CI ${formatDate(p.plannedCheckIn)}` : ""}
+                    {p.plannedCheckOut ? ` • CO ${formatDate(p.plannedCheckOut)}` : ""}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold">{formatMaybeNGN(p.amountPaid)}</p>
+                  <p className="text-xs text-muted-foreground">{p.status}</p>
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getAccessToken, getTenantId } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import {
   Users,
   ShieldCheck,
   CreditCard,
+  Download,
 } from "lucide-react";
 
 type Booking = {
@@ -47,6 +48,14 @@ type Booking = {
   totalBill?: string | null;
   paidTotal?: string | null;
   outstandingAmount?: string | null;
+  charges?: Array<{
+    id: string;
+    title: string;
+    type: "ROOM" | "DAMAGE" | "EXTRA" | "PENALTY" | "DISCOUNT";
+    amount: string;
+    currency?: string;
+    createdAt: string;
+  }>;
 
   guestPhotoUrl?: string | null;
 
@@ -72,6 +81,50 @@ type BookingVisitor = {
   notes?: string | null;
 };
 
+type BillPreview = {
+  generatedAt: string;
+  booking: {
+    id: string;
+    reference: string;
+    status: string;
+    paymentStatus: string;
+    guestName: string;
+    guestPhone: string;
+    guestEmail: string;
+    propertyName: string;
+    propertyAddress: string;
+    unitName: string;
+    unitType: string;
+    checkIn: string;
+    checkOut: string;
+    currency: string;
+    baseAmount: string;
+  };
+  charges: Array<{
+    id: string;
+    type: string;
+    typeLabel: string;
+    title: string;
+    amount: string;
+    currency: string;
+    createdAt: string;
+  }>;
+  payments: Array<{
+    id: string;
+    amount: string;
+    currency: string;
+    method: string;
+    paidAt: string;
+    reference: string;
+  }>;
+  summary: {
+    totalBill: string;
+    paidTotal: string;
+    balanceDue: string;
+    currency: string;
+  };
+};
+
 function getErrorMessage(e: unknown, fallback: string) {
   if (e && typeof e === "object" && "message" in e) {
     const msg = (e as { message?: unknown }).message;
@@ -90,6 +143,32 @@ function extractApiCode(err: unknown) {
   return typeof code === "string" ? code : "";
 }
 
+function chargeTypeLabel(charge: { type: string; title?: string | null }) {
+  const type = String(charge.type || "").toUpperCase();
+  if (type === "ROOM") return "Room";
+  if (type === "DAMAGE") return "Damage";
+  if (type === "PENALTY") return "Penalty";
+  if (type === "DISCOUNT") return "Discount";
+  if (type !== "EXTRA") return charge.type;
+
+  const title = String(charge.title || "").trim();
+  const lower = title.toLowerCase();
+
+  if (lower.includes("restaurant")) return "Restaurant";
+  if (lower.includes("laundry")) return "Laundry";
+  if (lower.includes("bar")) return "Bar";
+  if (lower.includes("overstay")) return "Overstay";
+  if (lower.includes("stay extension")) return "Stay Extension";
+
+  const prefix = title.split(":")[0]?.trim().toUpperCase();
+  if (["RESTAURANT", "LAUNDRY", "BAR", "OTHER"].includes(prefix)) {
+    return prefix.charAt(0) + prefix.slice(1).toLowerCase();
+  }
+  return "Extra";
+}
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+
 export default function CheckOutPage() {
   const nav = useNavigate();
 
@@ -106,11 +185,18 @@ export default function CheckOutPage() {
   const [visitorBooking, setVisitorBooking] = useState<Booking | null>(null);
   const [checkOutError, setCheckOutError] = useState("");
   const [damageChargeNote, setDamageChargeNote] = useState("");
+  const [serviceChargeNote, setServiceChargeNote] = useState("");
   const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
   const [visitors, setVisitors] = useState<BookingVisitor[]>([]);
   const [visitorsLoading, setVisitorsLoading] = useState(false);
   const [visitorsError, setVisitorsError] = useState("");
   const [visitorBusyId, setVisitorBusyId] = useState<string | null>(null);
+  const [billOpen, setBillOpen] = useState(false);
+  const [billLoading, setBillLoading] = useState(false);
+  const [billError, setBillError] = useState("");
+  const [billData, setBillData] = useState<BillPreview | null>(null);
+  const [billExporting, setBillExporting] = useState<"CSV" | "XLSX" | "PDF" | null>(null);
+  const [billSending, setBillSending] = useState(false);
   const [extendOpen, setExtendOpen] = useState(false);
   const [extendBusy, setExtendBusy] = useState(false);
   const [extendBooking, setExtendBooking] = useState<Booking | null>(null);
@@ -144,6 +230,12 @@ export default function CheckOutPage() {
     certifyNoDamages: false,
     notes: "",
   });
+  const [serviceChargeForm, setServiceChargeForm] = useState({
+    category: "RESTAURANT",
+    title: "",
+    amount: "",
+    notes: "",
+  });
 
   const count = useMemo(() => bookings.length, [bookings]);
 
@@ -174,10 +266,102 @@ export default function CheckOutPage() {
     }
   }
 
+  async function refreshActiveBooking() {
+    if (!activeBooking) return;
+    const qs = q.trim() ? `?search=${encodeURIComponent(q.trim())}` : "";
+    const data = await apiFetch(`/api/bookings/inhouse${qs}`);
+    const rows = (data?.bookings ?? []) as Booking[];
+    setBookings(rows);
+    const latest = rows.find((x) => x.id === activeBooking.id);
+    if (latest) {
+      setActiveBooking(latest);
+      setCheckOutForm((p) => ({
+        ...p,
+        outstandingAmount: toFixedMoney(Number(latest.outstandingAmount || "0") || 0),
+        certifyNoOutstanding: false,
+      }));
+    }
+  }
+
+  async function openBillPreview(b: Booking) {
+    setBillOpen(true);
+    setBillLoading(true);
+    setBillError("");
+    setBillData(null);
+    try {
+      const data = await apiFetch(`/api/bookings/${b.id}/bill`);
+      setBillData((data?.bill ?? null) as BillPreview | null);
+    } catch (e: unknown) {
+      setBillError(getErrorMessage(e, "Failed to load bill preview"));
+    } finally {
+      setBillLoading(false);
+    }
+  }
+
+  async function downloadBillFile(bookingId: string, kind: "CSV" | "XLSX" | "PDF") {
+    const endpoint = kind === "CSV" ? "bill.csv" : kind === "XLSX" ? "bill.xlsx" : "bill.pdf";
+    setBillExporting(kind);
+    setBillError("");
+    try {
+      const headers = new Headers();
+      const tenantId = getTenantId();
+      const token = getAccessToken();
+      if (tenantId) headers.set("x-tenant-id", tenantId);
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
+      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/${endpoint}`, {
+        method: "GET",
+        headers,
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        let msg = "Failed to export bill";
+        try {
+          const parsed = txt ? JSON.parse(txt) : null;
+          msg = parsed?.error?.message || parsed?.message || msg;
+        } catch {
+          // ignore parse errors
+        }
+        throw new Error(msg);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bill_${bookingId.slice(-8)}.${kind === "CSV" ? "csv" : kind === "XLSX" ? "xlsx" : "pdf"}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setBillError(getErrorMessage(e, "Failed to export bill"));
+    } finally {
+      setBillExporting(null);
+    }
+  }
+
+  async function sendBillToGuest(bookingId: string) {
+    setBillSending(true);
+    setBillError("");
+    try {
+      await apiFetch(`/api/bookings/${bookingId}/bill/send`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      toast.success("Bill sent to guest email");
+    } catch (e: unknown) {
+      setBillError(getErrorMessage(e, "Failed to send bill email"));
+    } finally {
+      setBillSending(false);
+    }
+  }
+
   function openCheckOutModal(b: Booking) {
     setActiveBooking(b);
     setCheckOutError("");
     setDamageChargeNote("");
+    setServiceChargeNote("");
     setPhotoLoadFailed(false);
     const outstandingFromServer = String(b.outstandingAmount ?? "0.00");
 
@@ -213,6 +397,12 @@ export default function CheckOutPage() {
       refundReason: "",
       certifyNoOutstanding: false,
       certifyNoDamages: false,
+      notes: "",
+    });
+    setServiceChargeForm({
+      category: "RESTAURANT",
+      title: "",
+      amount: "",
       notes: "",
     });
 
@@ -428,6 +618,12 @@ export default function CheckOutPage() {
     (Number.isFinite(outstandingNum) ? outstandingNum : 0) + (Number.isFinite(damagesNum) ? damagesNum : 0)
   );
   const canAddDamageCharge = Boolean(activeBooking) && damagesNum > 0.009 && busyId !== activeBooking?.id;
+  const serviceAmountNum = Number(serviceChargeForm.amount || "0");
+  const canAddServiceCharge =
+    Boolean(activeBooking) &&
+    Number.isFinite(serviceAmountNum) &&
+    serviceAmountNum > 0.009 &&
+    busyId !== activeBooking?.id;
   const overstayNum = Number(checkOutForm.overstayAmount || "0");
   const hasOverstayAmount = Number.isFinite(overstayNum) && overstayNum > 0.009;
   const canAddOverstayCharge =
@@ -477,6 +673,7 @@ export default function CheckOutPage() {
     setError("");
     setCheckOutError("");
     setDamageChargeNote("");
+    setServiceChargeNote("");
     setBusyId(activeBooking.id);
 
     try {
@@ -532,6 +729,7 @@ export default function CheckOutPage() {
 
     setCheckOutError("");
     setDamageChargeNote("");
+    setServiceChargeNote("");
     setBusyId(activeBooking.id);
 
     try {
@@ -570,6 +768,44 @@ export default function CheckOutPage() {
     }
   }
 
+  async function addServiceChargeOnly() {
+    if (!activeBooking) return;
+    if (!canAddServiceCharge) {
+      setCheckOutError("Enter a service charge amount greater than 0.00.");
+      return;
+    }
+
+    setCheckOutError("");
+    setServiceChargeNote("");
+    setBusyId(activeBooking.id);
+
+    try {
+      await apiFetch(`/api/bookings/${activeBooking.id}/service-charge`, {
+        method: "POST",
+        body: JSON.stringify({
+          category: serviceChargeForm.category,
+          title: serviceChargeForm.title || null,
+          amount: serviceChargeForm.amount || "0.00",
+          notes: serviceChargeForm.notes || null,
+        }),
+      });
+
+      toast.success("Service charge added");
+      setServiceChargeForm({
+        category: serviceChargeForm.category,
+        title: "",
+        amount: "",
+        notes: "",
+      });
+      setServiceChargeNote("Service charge added. Please settle outstanding to complete checkout.");
+      await refreshActiveBooking();
+    } catch (e: unknown) {
+      setCheckOutError(getErrorMessage(e, "Failed to add service charge."));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function isOverstayedBooking(b: Booking | null) {
     if (!b?.checkOut) return false;
     return new Date(b.checkOut).getTime() < Date.now();
@@ -593,6 +829,7 @@ export default function CheckOutPage() {
 
     setCheckOutError("");
     setDamageChargeNote("");
+    setServiceChargeNote("");
     setBusyId(activeBooking.id);
 
     try {
@@ -876,6 +1113,12 @@ export default function CheckOutPage() {
               </div>
             ) : null}
 
+            {serviceChargeNote ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-sm font-medium text-emerald-700">{serviceChargeNote}</p>
+              </div>
+            ) : null}
+
             {/* show guest photo */}
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-start gap-3">
@@ -920,8 +1163,109 @@ export default function CheckOutPage() {
                     <CreditCard className="mr-2 h-4 w-4" />
                     Settle Payment (Outstanding)
                   </Button>
+
+                  {activeBooking ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={() => openBillPreview(activeBooking)}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Preview / Export Bill
+                    </Button>
+                  ) : null}
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+              <p className="text-sm font-semibold">Current Bill Details</p>
+              {activeBooking?.charges && activeBooking.charges.length > 0 ? (
+                <div className="space-y-2">
+                  {activeBooking.charges.map((c) => (
+                    <div key={c.id} className="flex items-start justify-between gap-3 rounded-md border border-slate-200 p-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{c.title}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {chargeTypeLabel(c)} • {formatDateTimeLagos(c.createdAt)}
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold shrink-0">{formatNaira(Number(c.amount || "0"))}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No itemized charges yet. Room charge may still apply in total.</p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-3">
+              <p className="text-sm font-semibold text-indigo-800">Add In-Stay Service Charge</p>
+              <p className="text-xs text-indigo-700">
+                Use this for restaurant, laundry, bar, or other guest consumptions before checkout.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <select
+                    className="w-full h-10 px-3 border border-slate-300 rounded-lg bg-background"
+                    value={serviceChargeForm.category}
+                    onChange={(e) => setServiceChargeForm((p) => ({ ...p, category: e.target.value }))}
+                  >
+                    <option value="RESTAURANT">Restaurant</option>
+                    <option value="LAUNDRY">Laundry</option>
+                    <option value="BAR">Bar</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Amount (₦)</Label>
+                  <Input
+                    inputMode="decimal"
+                    value={serviceChargeForm.amount}
+                    onChange={(e) => setServiceChargeForm((p) => ({ ...p, amount: toMoneyString(e.target.value) }))}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Title</Label>
+                  <Input
+                    value={serviceChargeForm.title}
+                    onChange={(e) => setServiceChargeForm((p) => ({ ...p, title: e.target.value }))}
+                    placeholder="e.g. Dinner, Laundry batch"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Notes (optional)</Label>
+                  <Input
+                    value={serviceChargeForm.notes}
+                    onChange={(e) => setServiceChargeForm((p) => ({ ...p, notes: e.target.value }))}
+                    placeholder="Any billing detail..."
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addServiceChargeOnly}
+                className="w-full"
+                disabled={!canAddServiceCharge}
+              >
+                {busyId === activeBooking?.id ? (
+                  <>
+                    <RefreshCcw className="mr-2 h-4 w-4 animate-spin" />
+                    Adding service charge…
+                  </>
+                ) : (
+                  "Add Service Charge"
+                )}
+              </Button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1210,6 +1554,120 @@ export default function CheckOutPage() {
             {!canSubmitCheckout ? (
               <p className="text-xs text-amber-700">Please tick both certifications before you can check-out.</p>
             ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={billOpen}
+        onOpenChange={(open: boolean) => {
+          setBillOpen(open);
+          if (!open) {
+            setBillLoading(false);
+            setBillExporting(null);
+            setBillError("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Bill Preview</DialogTitle>
+            <DialogDescription>
+              Review bill details and export as pdf to print or send to Guest email before completing checkout.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 overflow-y-auto pr-1 max-h-[calc(90vh-120px)]">
+            {billError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-sm font-medium text-red-700">{billError}</p>
+              </div>
+            ) : null}
+
+            {billLoading ? (
+              <div className="rounded-lg border border-slate-200 p-4 text-sm text-muted-foreground">
+                Loading bill preview...
+              </div>
+            ) : billData ? (
+              <>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <p className="font-semibold">{billData.booking.guestName || "Guest"}</p>
+                  <p className="text-muted-foreground mt-1">
+                    Ref: #{billData.booking.reference} • {billData.booking.propertyName} — {billData.booking.unitName}
+                  </p>
+                  <p className="text-muted-foreground mt-1">
+                    Stay: {formatDateTimeLagos(billData.booking.checkIn)} to {formatDateTimeLagos(billData.booking.checkOut)}
+                  </p>
+                  <p className="text-muted-foreground mt-1">
+                    Guest Email: {billData.booking.guestEmail || "Not maintained"}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                  <p className="text-sm font-semibold">Bill Lines</p>
+                  {billData.charges.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No open bill lines found.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {billData.charges.map((c) => (
+                        <div key={c.id} className="flex items-start justify-between gap-3 rounded-md border border-slate-200 p-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{c.title || c.typeLabel}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {c.typeLabel} • {formatDateTimeLagos(c.createdAt)}
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold shrink-0">{formatNaira(Number(c.amount || "0"))}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total Bill</p>
+                    <p className="text-sm font-semibold">{formatNaira(Number(billData.summary.totalBill || "0"))}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Paid</p>
+                    <p className="text-sm font-semibold">{formatNaira(Number(billData.summary.paidTotal || "0"))}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Balance Due</p>
+                    <p className="text-sm font-semibold">{formatNaira(Number(billData.summary.balanceDue || "0"))}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => downloadBillFile(billData.booking.id, "PDF")}
+                    disabled={billExporting !== null}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    {billExporting === "PDF" ? "Exporting PDF..." : "Export PDF"}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => sendBillToGuest(billData.booking.id)}
+                    disabled={billSending || billExporting !== null || !billData.booking.guestEmail}
+                  >
+                    {billSending ? "Sending..." : "Send Bill to Guest Email"}
+                  </Button>
+                </div>
+                {!billData.booking.guestEmail ? (
+                  <p className="text-xs text-amber-700">
+                    Guest email is not maintained for this booking. Update guest email before sending bill.
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-lg border border-slate-200 p-4 text-sm text-muted-foreground">
+                Open a booking bill to preview.
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
