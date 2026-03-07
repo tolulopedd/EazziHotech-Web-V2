@@ -61,7 +61,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="px-3 pt-5 pb-3 md:px-4 md:pt-6">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-3xl ring-1 ring-indigo-400 overflow-hidden bg-white">
-            <img src="/logo512.png" alt="EazziHotech logo" className="h-full w-full object-contain" />
+            <img src="/logo128.png" alt="EazziHotech logo" className="h-full w-full object-contain" />
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold tracking-tight text-indigo-700">EazziHotech</div>

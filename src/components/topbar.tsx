@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Menu, LogOut, User, BookOpen } from "lucide-react";
-
-
+import { Menu, LogOut, BookOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { apiFetch, clearAuthSession } from "@/lib/api";
@@ -90,7 +88,6 @@ export function Topbar({ onMenu }: { onMenu?: () => void })  {
   }
 
   const [ngTime, setNgTime] = useState("");
-
 useEffect(() => {
   function updateTime() {
     const formatter = new Intl.DateTimeFormat("en-NG", {
@@ -230,7 +227,6 @@ useEffect(() => {
               {userName.charAt(0).toUpperCase()}
             </div>
 
-            <User className="hidden h-4 w-4 text-indigo-700 md:hidden" />
           </Button>
 
           {/* Logout */}

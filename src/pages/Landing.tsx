@@ -211,7 +211,7 @@ export default function Landing() {
       "@type": "Organization",
       name: "MyEazzi Solution Limited",
       url: "https://www.eazzihotech.com",
-      logo: `${window.location.origin}/logo512.png`,
+      logo: `${window.location.origin}/logo128.png`,
       contactPoint: {
         "@type": "ContactPoint",
         telephone: "+234-905-2222-022",
@@ -329,7 +329,7 @@ export default function Landing() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-3xl ring-1 ring-indigo-300 overflow-hidden bg-white">
-              <img src="/logo512.png" alt="EazziHotech logo" className="h-full w-full object-contain" />
+              <img src="/logo128.png" alt="EazziHotech logo" className="h-full w-full object-contain" />
             </div>
             <span className="text-lg font-bold tracking-tight">EazziHotech</span>
             <span className="hidden rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 sm:inline-flex">
