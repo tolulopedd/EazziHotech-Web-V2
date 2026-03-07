@@ -12,7 +12,7 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn("bg-background p-3", className)}
+      className={cn("w-full bg-background p-3", className)}
       components={{
         DayButton: CalendarDayButton,
         ...props.components,

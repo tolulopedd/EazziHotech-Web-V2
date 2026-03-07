@@ -56,9 +56,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div className="flex h-full flex-col bg-white-50 rounded-2xl border border-indigo-50 shadow-xsm">
+    <div className="flex h-full flex-col rounded-xl border border-indigo-50 bg-white shadow-sm md:rounded-2xl">
       {/* Brand / Workspace */}
-      <div className="px-4 pt-6 pb-3">
+      <div className="px-3 pt-5 pb-3 md:px-4 md:pt-6">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-3xl ring-1 ring-indigo-400 overflow-hidden bg-white">
             <img src="/logo512.png" alt="EazziHotech logo" className="h-full w-full object-contain" />
@@ -72,7 +72,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <Separator />
 
       {/* Nav */}
-      <div className="flex-1 overflow-y-auto px-3 py-6">
+      <div className="flex-1 overflow-y-auto px-2 py-4 md:px-3 md:py-6">
         <nav className="space-y-1">
           {items.map((it) => {
             const Icon = it.icon;
@@ -102,7 +102,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <Separator />
 
       {/* Footer */}
-      <div className="p-3">
+      <div className="p-2.5 md:p-3">
         <Button
           variant="ghost"
           className="w-full justify-start rounded-xl text-indigo-700 hover:bg-slate-50"

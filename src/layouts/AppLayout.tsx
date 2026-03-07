@@ -37,13 +37,12 @@ export function AppLayout() {
         {/* ✅ Mobile slide-in sidebar */}
         <aside
           className={cx(
-            "fixed inset-y-0 left-0 z-50 w-[280px] transform transition-transform duration-300 ease-out md:hidden",
+            "fixed inset-y-0 left-0 z-50 w-[min(18rem,calc(100vw-0.75rem))] bg-white shadow-xl transform transition-transform duration-300 ease-out md:hidden",
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           )}
           style={{ willChange: "transform" }}
         >
-          {/* optional: give it padding so it doesn't touch the screen edges */}
-          <div className="h-full p-3">
+          <div className="h-full p-2">
             <Sidebar onNavigate={() => setSidebarOpen(false)} />
           </div>
         </aside>

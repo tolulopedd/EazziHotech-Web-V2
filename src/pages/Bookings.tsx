@@ -233,6 +233,7 @@ function toNumberSafe(v: string) {
 
 export default function Bookings() {
   const userRole = ((localStorage.getItem("userRole") || "staff").toUpperCase() as Role);
+  const [calendarMonths, setCalendarMonths] = useState(2);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [bookingsQuery, setBookingsQuery] = useState("");
@@ -259,6 +260,8 @@ export default function Bookings() {
 
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [unitsByProperty, setUnitsByProperty] = useState<Record<string, Unit[]>>({});
+  const [unitsLoading, setUnitsLoading] = useState(false);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [selectedUnitId, setSelectedUnitId] = useState("");
   const [bookingMode, setBookingMode] = useState<"NEW" | "PREBOOKING">("NEW");
@@ -417,6 +420,17 @@ export default function Bookings() {
     fetchPreBookings();
     void loadTenantPolicy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const media = window.matchMedia("(max-width: 767px)");
+    const syncMonths = () => setCalendarMonths(media.matches ? 1 : 2);
+    syncMonths();
+
+    media.addEventListener("change", syncMonths);
+    return () => media.removeEventListener("change", syncMonths);
   }, []);
 
   // ✅ Prefill payment ONCE when dialog opens
@@ -599,9 +613,11 @@ export default function Bookings() {
 
   async function fetchUnits(propertyId: string) {
     try {
+      setUnitsLoading(true);
       const data = await apiFetch(`/api/properties/${propertyId}/units`);
       const list = (data.units || []) as Unit[];
       setUnits(list);
+      setUnitsByProperty((prev) => ({ ...prev, [propertyId]: list }));
 
       setUnitMap((prev) => {
         const next = { ...prev };
@@ -610,6 +626,9 @@ export default function Bookings() {
       });
     } catch (e: any) {
       toast.error(e?.message || "Failed to load units");
+      setUnits([]);
+    } finally {
+      setUnitsLoading(false);
     }
   }
 
@@ -621,14 +640,21 @@ export default function Bookings() {
       const results = await Promise.allSettled(list.map((p) => apiFetch(`/api/properties/${p.id}/units`)));
 
       const nextMap: Record<string, string> = {};
-      for (const r of results) {
+      const nextUnitsByProperty: Record<string, Unit[]> = {};
+      for (const [index, r] of results.entries()) {
+        const propertyId = list[index]?.id;
+        if (!propertyId) continue;
         if (r.status === "fulfilled") {
           const units = (r.value?.units || []) as Unit[];
+          nextUnitsByProperty[propertyId] = units;
           for (const u of units) nextMap[u.id] = u.name;
+        } else if (!(propertyId in nextUnitsByProperty)) {
+          nextUnitsByProperty[propertyId] = [];
         }
       }
 
       setUnitMap((prev) => ({ ...prev, ...nextMap }));
+      setUnitsByProperty((prev) => ({ ...prev, ...nextUnitsByProperty }));
     } catch {
       // silent
     }
@@ -1357,12 +1383,25 @@ async function handleCreateBooking() {
                       setBookingTouched((prev) => ({ ...prev, property: true }));
                       setSelectedPropertyId(pid);
                       setSelectedUnitId("");
-                      setUnits([]);
                       setRange(undefined);
                       setUnitBookings([]);
                       setEditableTotal("");
                       setTotalTouched(false);
-                      if (pid) fetchUnits(pid);
+                      if (!pid) {
+                        setUnits([]);
+                        setUnitsLoading(false);
+                        return;
+                      }
+
+                      const cachedUnits = unitsByProperty[pid];
+                      if (cachedUnits) {
+                        setUnits(cachedUnits);
+                        setUnitsLoading(false);
+                      } else {
+                        setUnits([]);
+                        setUnitsLoading(true);
+                      }
+                      void fetchUnits(pid);
                     }}
                   >
                     <option value="">Select property</option>
@@ -1381,7 +1420,7 @@ async function handleCreateBooking() {
                   <select
                     className="w-full h-11 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent bg-background disabled:opacity-60"
                     value={selectedUnitId}
-                    disabled={!selectedPropertyId}
+                    disabled={!selectedPropertyId || unitsLoading}
                     onChange={(e) => {
                       const uid = e.target.value;
                       setBookingTouched((prev) => ({ ...prev, unit: true, dates: false }));
@@ -1393,7 +1432,13 @@ async function handleCreateBooking() {
                       if (uid) fetchBookingsForUnit(uid);
                     }}
                   >
-                    <option value="">{selectedPropertyId ? "Select unit" : "Select property first"}</option>
+                    <option value="">
+                      {!selectedPropertyId
+                        ? "Select property first"
+                        : unitsLoading
+                        ? "Loading units..."
+                        : "Select unit"}
+                    </option>
                     {units.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name} • {u.type} • cap {u.capacity} • {formatMaybeNGN(u.basePrice)}
@@ -1435,7 +1480,11 @@ async function handleCreateBooking() {
                       </Button>
                     </PopoverTrigger>
 
-                    <PopoverContent className="w-auto h-auto p-4" align="start">
+                    <PopoverContent
+                      className="w-[calc(100vw-1.5rem)] max-w-[44rem] overflow-x-auto p-2 sm:w-auto sm:p-4"
+                      align="center"
+                      collisionPadding={12}
+                    >
                       <Calendar
                         mode="range"
                         selected={range}
@@ -1443,7 +1492,8 @@ async function handleCreateBooking() {
                           setBookingTouched((prev) => ({ ...prev, dates: true }));
                           setRange(nextRange);
                         }}
-                        numberOfMonths={2}
+                        numberOfMonths={calendarMonths}
+                        className="min-w-[18rem]"
                         disabled={(date) => {
                           const today = lagosDayNumber(new Date());
                           const earliestAllowed = today - BOOKING_BACKDATE_DAYS_ALLOWED;
