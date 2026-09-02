@@ -1089,7 +1089,7 @@ export default function CheckOutPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-hidden">
+        <DialogContent className="sm:max-w-xl max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-indigo-600" />
@@ -1206,7 +1206,7 @@ export default function CheckOutPage() {
                 Use this for restaurant, laundry, bar, or other guest consumptions before checkout.
               </p>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Category</Label>
                   <select
@@ -1231,7 +1231,7 @@ export default function CheckOutPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Title</Label>
                   <Input
@@ -1268,7 +1268,7 @@ export default function CheckOutPage() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Outstanding Amount (₦)</Label>
                 <Input
@@ -1328,7 +1328,7 @@ export default function CheckOutPage() {
                   {getOverstayDays(activeBooking) === 1 ? "" : "s"} past scheduled checkout
                 </p>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Overstay Charge (₦)</Label>
                     <Input
@@ -1373,7 +1373,7 @@ export default function CheckOutPage() {
                   Scheduled checkout is in the future. Apply policy and decide refund manually.
                 </p>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Booked Nights</p>
                     <p className="text-sm font-medium">{bookedNights}</p>
@@ -1455,7 +1455,7 @@ export default function CheckOutPage() {
                 </label>
 
                 {checkOutForm.refundApproved ? (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Refund Amount (₦)</Label>
                       <Input
@@ -1569,7 +1569,7 @@ export default function CheckOutPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden">
+        <DialogContent className="sm:max-w-2xl max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Bill Preview</DialogTitle>
             <DialogDescription>
@@ -1624,7 +1624,7 @@ export default function CheckOutPage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
                   <div>
                     <p className="text-xs text-muted-foreground">Total Bill</p>
                     <p className="text-sm font-semibold">{formatNaira(Number(billData.summary.totalBill || "0"))}</p>
@@ -1683,7 +1683,7 @@ export default function CheckOutPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarPlus2 className="h-5 w-5 text-indigo-600" />
@@ -1786,7 +1786,7 @@ export default function CheckOutPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-hidden">
+        <DialogContent className="sm:max-w-xl max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-indigo-600" />

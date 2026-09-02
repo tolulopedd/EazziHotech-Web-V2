@@ -902,7 +902,7 @@ export default function Properties() {
           if (!open) setEditUnitAttempted(false);
         }}
       >
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-xl max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Unit</DialogTitle>
           </DialogHeader>
@@ -917,7 +917,7 @@ export default function Properties() {
                 <p className="text-xs text-red-600 mt-1">{editUnitNameError}</p>
               ) : null}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label>Type</Label>
                 <select
@@ -982,7 +982,7 @@ export default function Properties() {
 
               {editUnitForm.discountType ? (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label>{editUnitForm.discountType === "PERCENT" ? "Discount %" : "Promo Rate (₦)"}</Label>
                       <Input
@@ -1003,7 +1003,7 @@ export default function Properties() {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label>Start Date</Label>
                       <Input

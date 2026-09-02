@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { clearAuthSession, getAccessToken, getTenantId } from "@/lib/api";
 import { emitLogout } from "@/lib/authEvents";
 
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 export function RequireAuth() {
   const nav = useNavigate();

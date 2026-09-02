@@ -685,7 +685,7 @@ export default function CheckInPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-hidden">
+        <DialogContent className="sm:max-w-xl max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Check-in Guest</DialogTitle>
             <DialogDescription>
@@ -694,7 +694,7 @@ export default function CheckInPage() {
           </DialogHeader>
 
           <div className="space-y-5 overflow-y-auto pr-1 max-h-[calc(90vh-120px)]">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Guest Name</Label>
                 <Input
@@ -722,7 +722,7 @@ export default function CheckInPage() {
               {submitAttempted && guestEmailError ? <p className="text-xs text-red-600">{guestEmailError}</p> : null}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Nationality (optional)</Label>
                 <Input
@@ -750,7 +750,7 @@ export default function CheckInPage() {
             <div className="rounded-lg border border-slate-200 p-3 bg-slate-50 space-y-3">
               <p className="text-sm font-semibold">Identification</p>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>ID Type</Label>
                   <select

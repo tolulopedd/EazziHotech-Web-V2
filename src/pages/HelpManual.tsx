@@ -44,7 +44,7 @@ const MANUAL_SECTIONS: ManualSection[] = [
     ],
     bullets: [
       "Password reset: Use Forgot password, provide workspace (optional but recommended) and email, then complete reset through email link.",
-      "Session timeout: Users are automatically logged out after 5 minutes of inactivity.",
+      "Session timeout: Users are automatically logged out after 10 minutes of inactivity.",
       "Security note: Always log out when changing device or shift.",
     ],
   },

@@ -190,7 +190,7 @@ export default function Guests() {
               </Button>
             </DialogTrigger>
 
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Guest</DialogTitle>
               </DialogHeader>
@@ -250,7 +250,7 @@ export default function Guests() {
                 <div className="rounded-lg border border-slate-200 p-3 bg-slate-50 space-y-3">
                   <p className="text-sm font-semibold">Identification</p>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>ID Type</Label>
                       <select
@@ -398,7 +398,7 @@ export default function Guests() {
 
       {/* Details / Edit Modal */}
       <Dialog open={!!activeGuest || activeLoading} onOpenChange={(o) => !o && setActiveGuest(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Guest Details</DialogTitle>
           </DialogHeader>
@@ -550,7 +550,7 @@ function GuestDetails({
             <div className="rounded-lg border border-slate-200 p-3 bg-white space-y-2">
               <p className="text-sm font-semibold">Identification</p>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <p className="text-xs text-muted-foreground">ID Type</p>
                   <p className="text-sm font-medium text-slate-900">
@@ -637,7 +637,7 @@ function GuestDetails({
             <div className="rounded-lg border border-slate-200 p-3 bg-slate-50 space-y-3">
               <p className="text-sm font-semibold">Identification</p>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>ID Type</Label>
                   <select

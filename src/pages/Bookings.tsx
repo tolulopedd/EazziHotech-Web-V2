@@ -1067,7 +1067,7 @@ async function handleCreateBooking() {
                 New Pre-Booking
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Pre-Booking</DialogTitle>
                 <DialogDescription>
@@ -1158,7 +1158,7 @@ async function handleCreateBooking() {
                     </>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Planned Check-in</Label>
                     <Input
@@ -1199,7 +1199,7 @@ async function handleCreateBooking() {
                 </Button>
 
                 <Dialog open={showPreNewGuest} onOpenChange={setShowPreNewGuest}>
-                  <DialogContent className="sm:max-w-lg">
+                  <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Create Guest</DialogTitle>
                       <DialogDescription>
@@ -1215,7 +1215,7 @@ async function handleCreateBooking() {
                           placeholder="John Doe"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
                           <Label>Phone</Label>
                           <Input
@@ -1296,7 +1296,7 @@ async function handleCreateBooking() {
               </Button>
             </DialogTrigger>
 
-            <DialogContent className="sm:max-w-xl">
+            <DialogContent className="sm:max-w-xl max-h-[calc(100dvh-1rem)] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Booking</DialogTitle>
                 <DialogDescription>
@@ -1662,7 +1662,7 @@ async function handleCreateBooking() {
                 {/* ✅ Inline New Guest dialog (keeps Booking dialog open) */}
                 {bookingMode === "NEW" ? (
                 <Dialog open={showNewGuest} onOpenChange={setShowNewGuest}>
-                  <DialogContent className="sm:max-w-lg">
+                  <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Create Guest</DialogTitle>
                       <DialogDescription>
@@ -1680,7 +1680,7 @@ async function handleCreateBooking() {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
                           <Label>Phone</Label>
                           <Input
