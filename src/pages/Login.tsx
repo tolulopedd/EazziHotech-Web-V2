@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { apiFetch, publicFetch, setAuthSession } from "@/lib/api";
+import { formatDateLagos } from "@/lib/format";
 
 type Tenant = { id: string; name: string; slug: string };
 
@@ -201,7 +202,7 @@ export default function Login() {
 
       if (code === "TENANT_SUSPENDED") {
         const until = details?.currentPeriodEndAt
-          ? new Date(details.currentPeriodEndAt).toLocaleDateString()
+          ? formatDateLagos(details.currentPeriodEndAt)
           : null;
         toast.error(
           until

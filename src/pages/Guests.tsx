@@ -171,9 +171,6 @@ export default function Guests() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Guests</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage guest profiles and reuse guest information for bookings and check-in.
-          </p>
         </div>
 
         <div className="flex items-center gap-2">

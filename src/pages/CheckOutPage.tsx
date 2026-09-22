@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { formatNaira } from "@/lib/currency";
@@ -867,13 +867,12 @@ export default function CheckOutPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Check Out</h1>
-          <p className="text-muted-foreground mt-2">Search in-house guests and complete check-out.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => loadInHouse(q)} disabled={loading}>
             <RefreshCcw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -900,7 +899,7 @@ export default function CheckOutPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
             <div className="flex-1">
               <label className="text-sm font-medium">Search</label>
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
@@ -914,11 +913,12 @@ export default function CheckOutPage() {
                   />
                 </div>
 
-                <Button onClick={handleSearch} disabled={loading}>
+                <Button className="w-full sm:w-auto" onClick={handleSearch} disabled={loading}>
                   Search
                 </Button>
 
                 <Button
+                  className="w-full sm:w-auto"
                   variant="outline"
                   onClick={() => {
                     setQ("");
@@ -929,9 +929,6 @@ export default function CheckOutPage() {
                   Clear
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Tip: press <b>Enter</b> to search quickly.
-              </p>
             </div>
           </div>
         </CardContent>
@@ -1095,9 +1092,6 @@ export default function CheckOutPage() {
               <ShieldCheck className="h-5 w-5 text-indigo-600" />
               Checkout Certification
             </DialogTitle>
-            <DialogDescription>
-              Review payment and room condition details before confirming checkout.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5 overflow-y-auto pr-1 max-h-[calc(90vh-120px)]">
@@ -1572,9 +1566,6 @@ export default function CheckOutPage() {
         <DialogContent className="sm:max-w-2xl max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Bill Preview</DialogTitle>
-            <DialogDescription>
-              Review bill details and export as pdf to print or send to Guest email before completing checkout.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 overflow-y-auto pr-1 max-h-[calc(90vh-120px)]">
@@ -1689,9 +1680,6 @@ export default function CheckOutPage() {
               <CalendarPlus2 className="h-5 w-5 text-indigo-600" />
               Extend Stay
             </DialogTitle>
-            <DialogDescription>
-              Extend an in-house guest stay. Extension is allowed only if future dates are available.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -1792,9 +1780,6 @@ export default function CheckOutPage() {
               <Users className="h-5 w-5 text-indigo-600" />
               Visitor Log
             </DialogTitle>
-            <DialogDescription>
-              Record visitors for {visitorBooking ? displayGuestName(visitorBooking) : "selected guest"}.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 overflow-y-auto pr-1 max-h-[calc(90vh-120px)]">

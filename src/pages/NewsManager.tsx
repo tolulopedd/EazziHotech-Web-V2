@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { formatDateTimeLagos } from "@/lib/format";
 import { renderMarkdown } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,10 +65,7 @@ function normalizeExternalUrl(value: string) {
 }
 
 function toDate(v?: string | null) {
-  if (!v) return "—";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
+  return formatDateTimeLagos(v);
 }
 
 export default function NewsManager() {

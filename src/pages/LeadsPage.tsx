@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { formatDateTimeLagos } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -210,7 +211,6 @@ export default function LeadsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Leads</h1>
-        <p className="text-muted-foreground mt-2">Qualify inbound requests and manage verified hospitality prospects for sales outreach.</p>
       </div>
 
       <Card>
@@ -328,7 +328,7 @@ export default function LeadsPage() {
                 <div key={lead.id} className="grid grid-cols-12 items-center border-t px-4 py-3">
                   <div className="col-span-3">
                     <div className="font-medium">{lead.companyName}</div>
-                    <div className="text-xs text-muted-foreground">{lead.city && lead.state ? `${lead.city}, ${lead.state}` : new Date(lead.createdAt).toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">{lead.city && lead.state ? `${lead.city}, ${lead.state}` : formatDateTimeLagos(lead.createdAt)}</div>
                   </div>
                   <div className="col-span-2 text-sm">{lead.roomCount !== null && lead.roomCount !== undefined ? `${lead.roomCount} listed rooms` : lead.contactName}</div>
                   <div className="col-span-2 text-sm">{lead.status}</div>
@@ -468,7 +468,7 @@ export default function LeadsPage() {
                   <p className="mt-1 text-sm text-indigo-900">Preview the EazziHotech introduction before sending it to this verified business contact.</p>
                 </div>
                 {selected.introEmailSentAt ? (
-                  <p className="text-sm text-emerald-800">Sent on {new Date(selected.introEmailSentAt).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })}{selected.introEmailSubject ? `: ${selected.introEmailSubject}` : ""}</p>
+                  <p className="text-sm text-emerald-800">Sent on {formatDateTimeLagos(selected.introEmailSentAt)}{selected.introEmailSubject ? `: ${selected.introEmailSubject}` : ""}</p>
                 ) : !selected.email ? (
                   <p className="text-sm text-amber-800">Lead email is not maintained. Add and verify a direct business email before sending.</p>
                 ) : selected.verificationStatus !== "VERIFIED" ? (

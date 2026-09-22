@@ -3,7 +3,6 @@ import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, Download, RefreshCcw } from "lucide-react";
 import { formatNaira } from "@/lib/currency";
@@ -148,12 +147,9 @@ type ReportResponse = {
   }>;
 };
 
-type EnvMeta = {
-  env?: {
-    VITE_API_BASE_URL?: string;
-    VITE_API_URL?: string;
-  };
-};
+type ExportValue = string | number | boolean | null | undefined;
+type ExportRow = Record<string, ExportValue>;
+type ReportExport = { title: string; slug: string; headers: string[]; rows: ExportRow[] };
 
 function toISODate(d: Date) {
   const x = new Date(d);
@@ -169,31 +165,7 @@ function getErrorMessage(e: unknown, fallback: string) {
   return fallback;
 }
 
-function getApiBase() {
-  const meta = import.meta as EnvMeta;
-  const v = meta?.env?.VITE_API_BASE_URL || meta?.env?.VITE_API_URL;
-  return v ? String(v).replace(/\/$/, "") : "";
-}
-
-function getAuthHeaders() {
-  const token = localStorage.getItem("accessToken") || localStorage.getItem("token") || "";
-  const tenantId = localStorage.getItem("tenantId") || localStorage.getItem("x-tenant-id") || "";
-  return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(tenantId ? { "x-tenant-id": tenantId } : {}),
-  };
-}
-
-async function downloadCsv(pathWithQuery: string, filename: string) {
-  const base = getApiBase();
-  const url = `${base}${pathWithQuery}`;
-  const res = await fetch(url, { method: "GET", headers: { ...getAuthHeaders() } });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || "Export failed");
-  }
-
-  const blob = await res.blob();
+function downloadBlob(blob: Blob, filename: string) {
   const href = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = href;
@@ -202,6 +174,35 @@ async function downloadCsv(pathWithQuery: string, filename: string) {
   a.click();
   a.remove();
   URL.revokeObjectURL(href);
+}
+
+function csvCell(value: ExportValue) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function xmlCell(value: ExportValue) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function buildExcelXml(title: string, headers: string[], rows: ExportRow[]) {
+  const safeSheetName = title.replace(/[\\/:*?\[\]]/g, " ").slice(0, 31) || "Report";
+  const tableRows = [
+    `<Row><Cell ss:StyleID="title"><Data ss:Type="String">${xmlCell(title)}</Data></Cell></Row>`,
+    `<Row>${headers.map((header) => `<Cell ss:StyleID="header"><Data ss:Type="String">${xmlCell(header)}</Data></Cell>`).join("")}</Row>`,
+    ...rows.map((row) => `<Row>${headers.map((header) => `<Cell><Data ss:Type="String">${xmlCell(row[header])}</Data></Cell>`).join("")}</Row>`),
+  ].join("");
+
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles><Style ss:ID="title"><Font ss:Bold="1" ss:Size="14"/></Style><Style ss:ID="header"><Font ss:Bold="1"/><Interior ss:Color="#E0E7FF" ss:Pattern="Solid"/></Style></Styles>
+ <Worksheet ss:Name="${xmlCell(safeSheetName)}"><Table>${tableRows}</Table></Worksheet>
+</Workbook>`;
 }
 
 function TableShell({ children }: { children: React.ReactNode }) {
@@ -238,7 +239,7 @@ export default function ReportsPage() {
   const [propertyId, setPropertyId] = useState<string>("");
 
   const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState<"DAILY" | "OUTSTANDING" | null>(null);
+  const [downloading, setDownloading] = useState<"CSV" | "EXCEL" | null>(null);
   const [error, setError] = useState("");
   const [report, setReport] = useState<ReportResponse | null>(null);
   const [reportSearch, setReportSearch] = useState("");
@@ -311,6 +312,25 @@ export default function ReportsPage() {
     return rows.filter((x) => matchesReportSearch(reportSearch, [x.guestName, x.unitName]));
   }, [report?.damages, reportSearch]);
 
+  const activeExport = useMemo<ReportExport>(() => {
+    const room = (propertyName: string | null | undefined, unitName: string | null | undefined) => propertyName ? `${propertyName} - ${unitName || "Unit"}` : unitName || "Unit";
+    const date = (value: string) => formatDateLagos(value);
+    const reference = (id: string) => id.slice(0, 8).toUpperCase();
+
+    switch (activeTab) {
+      case "PAYMENTS": return { title: "Payments Report", slug: "payments", headers: ["Date", "Guest", "Room", "Booking Amount", "Paid", "Booking Reference"], rows: filteredPaymentRows.map((x) => ({ "Date": date(x.date), "Guest": x.guestName || "Guest", "Room": room(x.propertyName, x.room), "Booking Amount": x.bookingAmount, "Paid": x.paid, "Booking Reference": reference(x.bookingId) })) };
+      case "RECEIVABLES": return { title: "Receivables Report", slug: "receivables", headers: ["Date", "Guest", "Room", "Booking Amount", "Outstanding Amount", "Booking Reference"], rows: filteredReceivableRows.map((x) => ({ "Date": date(x.date), "Guest": x.guestName || "Guest", "Room": room(x.propertyName, x.room), "Booking Amount": x.bookingAmount, "Outstanding Amount": x.outstandingAmount, "Booking Reference": reference(x.bookingId) })) };
+      case "GUEST_PAYMENT_HISTORY": return { title: "Guest Payment History", slug: "guest-payment-history", headers: ["Date", "Guest", "Room", "Booking Amount", "Paid", "Booking Reference"], rows: filteredGuestPaymentHistoryRows.map((x) => ({ "Date": date(x.date), "Guest": x.guestName || "Guest", "Room": room(x.propertyName, x.room), "Booking Amount": x.bookingAmount, "Paid": x.paid, "Booking Reference": reference(x.bookingId) })) };
+      case "GUEST_DETAILS": return { title: "Guest Details", slug: "guest-details", headers: ["Name", "Phone Number", "Email"], rows: filteredGuestDetailsRows.map((x) => ({ "Name": x.name || "Guest", "Phone Number": x.phone || "-", "Email": x.email || "-" })) };
+      case "GUEST_VISIT_HISTORY": return { title: "Guest Visit History", slug: "guest-visit-history", headers: ["Name", "Check-in Date", "Check-out Date", "Room", "Status", "Booking Reference"], rows: filteredGuestVisitRows.map((x) => ({ "Name": x.name || "Guest", "Check-in Date": date(x.checkInDate), "Check-out Date": date(x.checkOutDate), "Room": room(x.propertyName, x.room), "Status": x.status, "Booking Reference": reference(x.bookingId) })) };
+      case "REVENUE": return { title: "Revenue and Sales Report", slug: "revenue-sales", headers: ["Date", "Guest", "Room", "Amount", "Booking Reference"], rows: filteredRevenueRows.map((x) => ({ "Date": date(x.date), "Guest": x.guestName || "Guest", "Room": room(x.propertyName, x.room), "Amount": x.amount, "Booking Reference": reference(x.bookingId) })) };
+      case "OCCUPANCY": return { title: "Occupancy and Stay Report", slug: "occupancy-stay", headers: ["Date", "Room", "Status"], rows: filteredOccupancyRows.map((x) => ({ "Date": date(x.date), "Room": room(x.propertyName, x.room), "Status": x.status === "OCCUPIED" ? "Occupied" : "Not occupied" })) };
+      case "REFUNDS": return { title: "Early Checkout and Refunds Report", slug: "early-checkout-refunds", headers: ["Date", "Guest", "Room", "Refund Policy", "Eligible Amount", "Refund Amount", "Refund Status", "Reason", "Booking Reference"], rows: filteredEarlyCheckoutRows.map((x) => ({ "Date": date(x.checkedOutAt), "Guest": x.guestName || "Guest", "Room": room(x.propertyName, x.unitName), "Refund Policy": x.refundPolicy || "NO_REFUND", "Eligible Amount": x.refundEligibleAmount, "Refund Amount": x.refundAmount, "Refund Status": x.refundStatus || "-", "Reason": x.refundReason || "-", "Booking Reference": reference(x.bookingId) })) };
+      case "DAMAGES": return { title: "Damages and Incidents Report", slug: "damages-incidents", headers: ["Date", "Guest", "Room", "Incident", "Amount", "Booking Reference"], rows: filteredDamageRows.map((x) => ({ "Date": date(x.createdAt), "Guest": x.guestName || "Guest", "Room": room(x.propertyName, x.unitName), "Incident": x.title, "Amount": x.amount, "Booking Reference": reference(x.bookingId) })) };
+      case "BOOKINGS": default: return { title: "Bookings Report", slug: "bookings", headers: ["Date", "Guest", "Room", "Booking Amount", "Paid", "Outstanding", "Stay Status", "Payment Status", "Booking Reference"], rows: filteredBookingsRows.map((x) => ({ "Date": date(x.date), "Guest": x.guestName || "Guest", "Room": room(x.propertyName, x.room), "Booking Amount": x.bookingAmount, "Paid": x.paid, "Outstanding": x.outstanding, "Stay Status": x.status, "Payment Status": x.paymentStatus, "Booking Reference": reference(x.bookingId) })) };
+    }
+  }, [activeTab, filteredBookingsRows, filteredDamageRows, filteredEarlyCheckoutRows, filteredGuestDetailsRows, filteredGuestPaymentHistoryRows, filteredGuestVisitRows, filteredOccupancyRows, filteredPaymentRows, filteredReceivableRows, filteredRevenueRows]);
+
   async function loadProperties() {
     try {
       const data = await apiFetch("/api/properties");
@@ -340,43 +360,24 @@ export default function ReportsPage() {
     }
   }
 
-  async function exportDailyCsv() {
-    setError("");
-    setDownloading("DAILY");
-    try {
-      const scopedPropertyId = isAdmin ? propertyId : "";
-      const qs =
-        `?from=${encodeURIComponent(effective.from)}` +
-        `&to=${encodeURIComponent(effective.to)}` +
-        (scopedPropertyId ? `&propertyId=${encodeURIComponent(scopedPropertyId)}` : "");
-
-      await downloadCsv(
-        `/api/reports/bookings-payments/daily.csv${qs}`,
-        `bookings-payments-daily_${effective.from}_${effective.to}${scopedPropertyId ? `_property-${scopedPropertyId}` : ""}.csv`
-      );
-    } catch (e: unknown) {
-      setError(getErrorMessage(e, "Failed to export daily CSV"));
-    } finally {
-      setDownloading(null);
+  function exportActiveReport(format: "CSV" | "EXCEL") {
+    if (activeExport.rows.length === 0) {
+      setError("There are no rows in the current filtered report to export.");
+      return;
     }
-  }
-
-  async function exportOutstandingCsv() {
     setError("");
-    setDownloading("OUTSTANDING");
+    setDownloading(format);
     try {
-      const scopedPropertyId = isAdmin ? propertyId : "";
-      const qs =
-        `?from=${encodeURIComponent(effective.from)}` +
-        `&to=${encodeURIComponent(effective.to)}` +
-        (scopedPropertyId ? `&propertyId=${encodeURIComponent(scopedPropertyId)}` : "");
-
-      await downloadCsv(
-        `/api/reports/bookings-payments/outstanding.csv${qs}`,
-        `outstanding-bookings_${effective.from}_${effective.to}${scopedPropertyId ? `_property-${scopedPropertyId}` : ""}.csv`
-      );
+      const filename = `${activeExport.slug}_${effective.from}_${effective.to}`;
+      if (format === "CSV") {
+        const csv = `\uFEFF${activeExport.headers.map(csvCell).join(",")}\n${activeExport.rows.map((row) => activeExport.headers.map((header) => csvCell(row[header])).join(",")).join("\n")}`;
+        downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${filename}.csv`);
+      } else {
+        const excel = buildExcelXml(activeExport.title, activeExport.headers, activeExport.rows);
+        downloadBlob(new Blob([excel], { type: "application/vnd.ms-excel;charset=utf-8" }), `${filename}.xls`);
+      }
     } catch (e: unknown) {
-      setError(getErrorMessage(e, "Failed to export outstanding CSV"));
+      setError(getErrorMessage(e, "Failed to export the selected report"));
     } finally {
       setDownloading(null);
     }
@@ -397,25 +398,9 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
+      <div>
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground mt-2">Operational reporting suite for bookings, payments, guests, revenue, and stay outcomes.</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={loadReport} disabled={loading}>
-            <RefreshCcw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button variant="outline" onClick={exportDailyCsv} disabled={loading || downloading !== null}>
-            <Download className="mr-2 h-4 w-4" />
-            {downloading === "DAILY" ? "Exporting..." : "Export Daily CSV"}
-          </Button>
-          <Button variant="outline" onClick={exportOutstandingCsv} disabled={loading || downloading !== null}>
-            <Download className="mr-2 h-4 w-4" />
-            {downloading === "OUTSTANDING" ? "Exporting..." : "Export Outstanding CSV"}
-          </Button>
         </div>
       </div>
 
@@ -427,17 +412,20 @@ export default function ReportsPage() {
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {(["TODAY", "WEEK", "MONTH", "CUSTOM"] as ReportRange[]).map((r) => (
-              <Button key={r} variant={range === r ? "default" : "outline"} onClick={() => setRange(r)} className="h-9">
-                {r === "TODAY" ? "Today" : r === "WEEK" ? "Last 7 days" : r === "MONTH" ? "This month" : "Custom"}
-              </Button>
-            ))}
-          </div>
+        <CardContent className="space-y-3 pt-0">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-end">
+            <div className="space-y-1 lg:col-span-5">
+              <label className="block text-sm font-medium text-left">Period</label>
+              <div className="flex flex-wrap gap-1.5">
+                {(["TODAY", "WEEK", "MONTH", "CUSTOM"] as ReportRange[]).map((r) => (
+                  <Button key={r} variant={range === r ? "default" : "outline"} onClick={() => setRange(r)} className="h-9 px-3">
+                    {r === "TODAY" ? "Today" : r === "WEEK" ? "Last 7 days" : r === "MONTH" ? "This month" : "Custom"}
+                  </Button>
+                ))}
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-            <div className="space-y-2">
+            <div className="space-y-1 lg:col-span-4">
               <label className="block text-sm font-medium text-left">Property</label>
               {isAdmin ? (
                 <select
@@ -456,27 +444,23 @@ export default function ReportsPage() {
                 </div>
               )}
             </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 lg:col-span-3">
+              <span className="block text-xs font-medium uppercase tracking-wide text-slate-500">Showing</span>
+              <span className="font-semibold text-slate-900">{formatDateLagos(effective.from)} → {formatDateLagos(effective.to)}</span>
+            </div>
 
             {range === "CUSTOM" ? (
-              <>
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-12 lg:grid-cols-4">
+                <div className="space-y-1">
                   <label className="block text-sm font-medium text-left">From</label>
                   <Input type="date" value={from} onChange={(e: ChangeEvent<HTMLInputElement>) => setFrom(e.target.value)} />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <label className="block text-sm font-medium text-left">To</label>
                   <Input type="date" value={to} onChange={(e: ChangeEvent<HTMLInputElement>) => setTo(e.target.value)} />
                 </div>
-              </>
-            ) : (
-              <div className="hidden md:block md:col-span-2" />
-            )}
-          </div>
-
-          <Separator />
-
-          <div className="text-sm text-muted-foreground">
-            Showing: <span className="font-medium text-slate-900">{effective.from} → {effective.to}</span>
+              </div>
+            ) : null}
           </div>
 
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
@@ -503,12 +487,28 @@ export default function ReportsPage() {
           <TabsTrigger className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm" value="REFUNDS">9. Early Checkout & Refunds</TabsTrigger>
           <TabsTrigger className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm" value="DAMAGES">10. Damages & Incidents</TabsTrigger>
         </TabsList>
-        <div className="max-w-sm">
-          <Input
-            value={reportSearch}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setReportSearch(e.target.value)}
-            placeholder="Search by guest or room..."
-          />
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className="w-full lg:max-w-sm">
+            <Input
+              value={reportSearch}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setReportSearch(e.target.value)}
+              placeholder="Search by guest or room..."
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 lg:ml-auto">
+            <Button variant="outline" onClick={loadReport} disabled={loading}>
+              <RefreshCcw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button variant="outline" onClick={() => exportActiveReport("CSV")} disabled={loading || downloading !== null || activeExport.rows.length === 0}>
+              <Download className="mr-2 h-4 w-4" />
+              {downloading === "CSV" ? "Exporting..." : "Export CSV"}
+            </Button>
+            <Button variant="outline" onClick={() => exportActiveReport("EXCEL")} disabled={loading || downloading !== null || activeExport.rows.length === 0}>
+              <Download className="mr-2 h-4 w-4" />
+              {downloading === "EXCEL" ? "Exporting..." : "Export Excel"}
+            </Button>
+          </div>
         </div>
 
         <TabsContent value="BOOKINGS">

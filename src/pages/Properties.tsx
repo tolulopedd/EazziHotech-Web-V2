@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Building2, Plus, Trash2, ChevronDown, ChevronUp, Users, Pencil } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatNaira } from "@/lib/currency";
+import { formatDateLagos } from "@/lib/format";
 
 interface Property {
   id: string;
@@ -536,7 +537,6 @@ export default function Properties() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Properties</h1>
-          <p className="text-muted-foreground mt-2">Manage your properties, units, and team members.</p>
         </div>
       </div>
 
@@ -579,7 +579,7 @@ export default function Properties() {
       {/* Properties View */}
       {(viewMode === "properties" || userRole !== "admin") && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-semibold">All Properties</h2>
             {userRole === "admin" && (
               <Dialog open={showPropertyDialog} onOpenChange={setShowPropertyDialog}>
@@ -718,7 +718,7 @@ export default function Properties() {
       {/* Tenants View */}
       {viewMode === "tenants" && userRole === "admin" && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-semibold">Team Members</h2>
             <Dialog open={showTenantDialog} onOpenChange={setShowTenantDialog}>
               <DialogTrigger asChild>
@@ -1180,7 +1180,7 @@ function UnitCard({
               {unit.discountType && unit.discountValue && unit.discountStart && unit.discountEnd ? (
                 <p className="text-xs text-amber-700">
                   Promo: {unit.discountType === "PERCENT" ? `${unit.discountValue}% off` : `${formatNaira(unit.discountValue)}/night`}{" "}
-                  ({String(unit.discountStart).slice(0, 10)} to {String(unit.discountEnd).slice(0, 10)})
+                  ({formatDateLagos(unit.discountStart)} to {formatDateLagos(unit.discountEnd)})
                 </p>
               ) : null}
             </div>

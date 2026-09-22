@@ -5,6 +5,7 @@ import { Menu, LogOut, BookOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { apiFetch, clearAuthSession } from "@/lib/api";
+import { formatDateLagos } from "@/lib/format";
 
 type TenantSubscriptionSnapshot = {
   subscriptionStatus?: string;
@@ -17,7 +18,7 @@ function buildSubscriptionNotice(input: TenantSubscriptionSnapshot | null) {
   const status = String(input.subscriptionStatus || "ACTIVE").toUpperCase();
   const days = typeof input.daysToExpiry === "number" ? input.daysToExpiry : null;
   const endAt = input.currentPeriodEndAt ? new Date(input.currentPeriodEndAt) : null;
-  const endLabel = endAt && !Number.isNaN(endAt.getTime()) ? endAt.toLocaleDateString() : null;
+  const endLabel = endAt && !Number.isNaN(endAt.getTime()) ? formatDateLagos(endAt) : null;
 
   if (status === "SUSPENDED") {
     return {
@@ -181,9 +182,6 @@ useEffect(() => {
                   @{tenantSlug}
                 </span>
               ) : null}
-            </div>
-            <div className="hidden text-[11px] text-muted-foreground sm:block">
-              Manage properties, bookings & payments
             </div>
           </div>
         </div>

@@ -22,7 +22,7 @@ export function AppLayout() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen overflow-x-hidden bg-muted/30">
       <div className="flex min-h-screen">
         {/* ✅ Mobile backdrop */}
         <div

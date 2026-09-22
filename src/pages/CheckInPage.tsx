@@ -3,7 +3,7 @@ import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CalendarCheck2, RefreshCcw, Clipboard, CheckCircle2 } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiUpload, compressToMaxBytes } from "@/lib/upload";
@@ -449,15 +449,12 @@ export default function CheckInPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Check In</h1>
-          <p className="text-muted-foreground mt-2">
-            Confirm arrivals for today and review upcoming check-ins for the week.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={refreshAll} disabled={loadingToday || loadingWeek}>
             <RefreshCcw className={`mr-2 h-4 w-4 ${(loadingToday || loadingWeek) ? "animate-spin" : ""}`} />
             Refresh
@@ -653,7 +650,7 @@ export default function CheckInPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button disabled className="opacity-60">
                         <CheckCircle2 className="mr-2 h-4 w-4" />
                         Check-in
@@ -688,9 +685,6 @@ export default function CheckInPage() {
         <DialogContent className="sm:max-w-xl max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Check-in Guest</DialogTitle>
-            <DialogDescription>
-              Confirm stay details before check-in. Guest profile updates are optional.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5 overflow-y-auto pr-1 max-h-[calc(90vh-120px)]">

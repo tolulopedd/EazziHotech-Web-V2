@@ -366,13 +366,6 @@ export default function Users() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
-        <p className="text-muted-foreground mt-2">
-          {scope === "PLATFORM_ADMINS"
-            ? "Super Admin view: tenant admins across all workspaces."
-            : myRole === "ADMIN"
-            ? "Manage admins, managers, and staff in your tenant."
-            : "Manage staff in your tenant."}
-        </p>
       </div>
 
       <Card>

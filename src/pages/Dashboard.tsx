@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatNaira } from "@/lib/currency";
+import { formatDateLagos } from "@/lib/format";
 
 type UserRole = "admin" | "manager" | "staff";
 
@@ -145,7 +146,6 @@ export default function Dashboard() {
   }
 
   const isAdmin = data.userRole === "admin";
-  const isManager = data.userRole === "manager";
   const isStaff = data.userRole === "staff";
 
   // Occupancy coloring: Green >= 70, Amber 30-69.9, Red < 30
@@ -164,11 +164,6 @@ export default function Dashboard() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground mt-2">
-          {isAdmin && "Welcome back! Here’s an overview of your entire workspace."}
-          {isManager && "Welcome back! Here’s an overview of your tenant’s performance."}
-          {isStaff && "Welcome back! Here are the bookings and payments to monitor today."}
-        </p>
       </div>
 
       {/* Stats Grid */}
@@ -396,8 +391,7 @@ function BookingItem({ booking }: { booking: RecentBooking }) {
       <div className="text-right mr-4">
         <p className="font-medium">{formatNaira(booking.amount)}</p>
         <p className="text-xs text-muted-foreground">
-          {new Date(booking.checkIn).toLocaleDateString()} -{" "}
-          {new Date(booking.checkOut).toLocaleDateString()}
+          {formatDateLagos(booking.checkIn)} - {formatDateLagos(booking.checkOut)}
         </p>
       </div>
 
@@ -430,7 +424,7 @@ function PaymentItem({ payment }: { payment: PendingPayment }) {
       <div className="text-right">
         <p className="font-medium">{formatNaira(payment.amount)}</p>
         <p className={`text-xs ${isOverdue ? "text-red-600" : "text-muted-foreground"}`}>
-          {new Date(payment.dueDate).toLocaleDateString()}
+          {formatDateLagos(payment.dueDate)}
         </p>
       </div>
     </div>

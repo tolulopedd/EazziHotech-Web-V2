@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { formatNaira } from "@/lib/currency";
 import { formatDateLagos, shortId } from "@/lib/format";
@@ -298,9 +298,6 @@ export default function Payments() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
-          <p className="text-muted-foreground mt-2">
-            Pending = bookings with balance due. Confirmed = all confirmed payment records.
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -313,7 +310,7 @@ export default function Payments() {
 
       {/* Tabs + Search */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex gap-2 border-b border-slate-200">
+        <div className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-px">
           <button
             onClick={() => setTab("PENDING")}
             disabled={loading}
@@ -480,9 +477,6 @@ export default function Payments() {
         <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Collect Payment</DialogTitle>
-            <DialogDescription>
-              Record received payment for this booking. Amount must not exceed balance due.
-            </DialogDescription>
           </DialogHeader>
 
           {selectedPending ? (

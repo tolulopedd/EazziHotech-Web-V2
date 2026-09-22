@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
-import { Calendar as CalendarIcon, Plus, CreditCard, RefreshCw, Search, UserPlus, X } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, CreditCard, RefreshCw, Search, UserPlus, X, Copy, Link2, Power } from "lucide-react";
 
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -12,11 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import { apiFetch } from "@/lib/api";
 import { formatNaira } from "@/lib/currency";
-import { formatDateLagos } from "@/lib/format";
+import { formatDateLagos, formatDateTimeLagos } from "@/lib/format";
 
 /* ================= TYPES ================= */
 
@@ -66,6 +66,14 @@ type PreBooking = {
   currency?: string;
   status: "PENDING" | "PAID" | "CANCELLED" | "CONVERTED";
   createdAt: string;
+};
+
+type PublicPreBookingLink = {
+  enabled: boolean;
+  url: string | null;
+  updatedAt?: string | null;
+  expiresAt?: string | null;
+  expired?: boolean;
 };
 
 interface Booking {
@@ -287,6 +295,8 @@ export default function Bookings() {
     idNumber: "",
   });
   const [creatingPreGuest, setCreatingPreGuest] = useState(false);
+  const [publicPreBookingLink, setPublicPreBookingLink] = useState<PublicPreBookingLink | null>(null);
+  const [publicPreBookingLinkLoading, setPublicPreBookingLinkLoading] = useState(false);
 
   const [range, setRange] = useState<DateRange | undefined>();
   const [unitBookings, setUnitBookings] = useState<Booking[]>([]);
@@ -419,6 +429,7 @@ export default function Bookings() {
     fetchProperties();
     fetchPreBookings();
     void loadTenantPolicy();
+    if (userRole === "ADMIN") void loadPublicPreBookingLink();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -598,6 +609,55 @@ export default function Bookings() {
     } catch (e: any) {
       toast.error(e?.message || "Failed to load pre-bookings");
       setPreBookings([]);
+    }
+  }
+
+  async function loadPublicPreBookingLink() {
+    try {
+      const data = await apiFetch("/api/prebookings/public-link");
+      setPublicPreBookingLink(data as PublicPreBookingLink);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load public pre-booking link");
+      setPublicPreBookingLink(null);
+    }
+  }
+
+  async function generatePublicPreBookingLink() {
+    if (publicPreBookingLinkLoading) return;
+    try {
+      setPublicPreBookingLinkLoading(true);
+      const data = await apiFetch("/api/prebookings/public-link/generate", { method: "POST" });
+      setPublicPreBookingLink(data as PublicPreBookingLink);
+      toast.success("Public pre-booking link is ready");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to generate public pre-booking link");
+    } finally {
+      setPublicPreBookingLinkLoading(false);
+    }
+  }
+
+  async function copyPublicPreBookingLink() {
+    if (!publicPreBookingLink?.url) return;
+    try {
+      await navigator.clipboard.writeText(publicPreBookingLink.url);
+      toast.success("Pre-booking link copied");
+    } catch {
+      toast.error("Unable to copy the link. Please copy it manually.");
+    }
+  }
+
+  async function disablePublicPreBookingLink() {
+    if (publicPreBookingLinkLoading) return;
+    if (!window.confirm("Disable the public pre-booking link? Customers will no longer be able to submit requests using it.")) return;
+    try {
+      setPublicPreBookingLinkLoading(true);
+      const data = await apiFetch("/api/prebookings/public-link/disable", { method: "POST" });
+      setPublicPreBookingLink(data as PublicPreBookingLink);
+      toast.success("Public pre-booking link disabled");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to disable public pre-booking link");
+    } finally {
+      setPublicPreBookingLinkLoading(false);
     }
   }
 
@@ -1033,10 +1093,9 @@ async function handleCreateBooking() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
-          <p className="text-muted-foreground mt-2">Create bookings, record payments, and track status.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => fetchBookings(bookingsQuery, { append: false, cursor: null })}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
@@ -1070,9 +1129,6 @@ async function handleCreateBooking() {
             <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Pre-Booking</DialogTitle>
-                <DialogDescription>
-                  Capture guest + advance payment before room assignment. Room will be selected at booking stage.
-                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -1202,9 +1258,6 @@ async function handleCreateBooking() {
                   <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Create Guest</DialogTitle>
-                      <DialogDescription>
-                        Add guest profile and assign it directly to this pre-booking.
-                      </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-3">
                       <div className="space-y-2">
@@ -1299,9 +1352,6 @@ async function handleCreateBooking() {
             <DialogContent className="sm:max-w-xl max-h-[calc(100dvh-1rem)] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Booking</DialogTitle>
-                <DialogDescription>
-                  Complete all required fields. Dates with booking conflicts are unavailable.
-                </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4">
@@ -1665,9 +1715,6 @@ async function handleCreateBooking() {
                   <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Create Guest</DialogTitle>
-                      <DialogDescription>
-                        Add a guest profile and assign it directly to this booking.
-                      </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-3">
@@ -1740,6 +1787,51 @@ async function handleCreateBooking() {
           </Dialog>
         </div>
       </div>
+
+      {userRole === "ADMIN" ? (
+        <Card className="border-indigo-200 bg-indigo-50/40">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base text-indigo-950">
+              <Link2 className="h-4 w-4" />
+              Public Pre-Booking Link
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Share this link with customers. Requests arrive as pending pre-bookings; your team confirms payment and assigns a room internally.
+            </p>
+            {publicPreBookingLink?.enabled && publicPreBookingLink.url ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input readOnly value={publicPreBookingLink.url} className="bg-white text-sm" aria-label="Public pre-booking link" />
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={copyPublicPreBookingLink} disabled={publicPreBookingLinkLoading}>
+                    <Copy className="mr-2 h-4 w-4" /> Copy
+                  </Button>
+                  <Button type="button" variant="outline" onClick={generatePublicPreBookingLink} disabled={publicPreBookingLinkLoading}>
+                    {publicPreBookingLinkLoading ? "Working..." : "Regenerate"}
+                  </Button>
+                  <Button type="button" variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" onClick={disablePublicPreBookingLink} disabled={publicPreBookingLinkLoading}>
+                    <Power className="mr-2 h-4 w-4" /> Disable
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-slate-600">
+                  {publicPreBookingLink?.expired ? "The previous link has expired." : "No public link is active for this workspace."}
+                </p>
+                <Button type="button" onClick={generatePublicPreBookingLink} disabled={publicPreBookingLinkLoading}>
+                  <Link2 className="mr-2 h-4 w-4" />
+                  {publicPreBookingLinkLoading ? "Generating..." : "Generate Link"}
+                </Button>
+              </div>
+            )}
+            {publicPreBookingLink?.enabled && publicPreBookingLink.expiresAt ? (
+              <p className="text-xs text-slate-500">Expires: {formatDateTimeLagos(publicPreBookingLink.expiresAt)}</p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* BOOKINGS SEARCH */}
       <Card>
@@ -1874,7 +1966,7 @@ const email =
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     {canEditBooking ? (
                       <Button
                         variant="outline"
@@ -1939,9 +2031,6 @@ const email =
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Record Payment</DialogTitle>
-            <DialogDescription>
-              Enter the amount received and include a payment reference for reconciliation.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -1993,9 +2082,6 @@ const email =
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Booking</DialogTitle>
-            <DialogDescription>
-              Update dates and total amount. Managers can edit only bookings in assigned properties.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { publicFetch } from "@/lib/api";
+import { formatDateLagos } from "@/lib/format";
 import { usePageSeo } from "@/lib/usePageSeo";
 import { ArrowUpRight, CalendarDays, Clapperboard, Newspaper, PlayCircle, Rss } from "lucide-react";
 
@@ -52,10 +53,7 @@ function niceType(type: NewsType) {
 }
 
 function niceDate(v?: string | null) {
-  if (!v) return "Recently";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "Recently";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return formatDateLagos(v, "Recently");
 }
 
 function normalizeExternalUrl(value?: string | null) {

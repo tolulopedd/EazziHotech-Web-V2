@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { publicFetch } from "@/lib/api";
+import { formatDateLagos } from "@/lib/format";
 import { renderMarkdown } from "@/lib/markdown";
 import { usePageSeo } from "@/lib/usePageSeo";
 import { Button } from "@/components/ui/button";
@@ -22,10 +23,7 @@ type PublicNewsItem = {
 };
 
 function niceDate(v?: string | null) {
-  if (!v) return "Recently";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "Recently";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return formatDateLagos(v, "Recently");
 }
 
 function normalizeUrl(value?: string | null) {

@@ -21,6 +21,7 @@ import CheckOutPage from "@/pages/CheckOutPage";
 import Guests from "@/pages/Guests";
 import LeadsPage from "@/pages/LeadsPage";
 import HelpManual from "@/pages/HelpManual";
+import PublicPreBooking from "@/pages/PublicPreBooking";
 
 // ✅ NEW
 import ReportsPage from "@/pages/ReportsPage";
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
   { path: "/login", element: <Login />, errorElement: <RouteError /> },
   { path: "/forgot-password", element: <ForgotPassword />, errorElement: <RouteError /> },
   { path: "/reset-password", element: <ResetPassword />, errorElement: <RouteError /> },
+  { path: "/pre-book/:token", element: <PublicPreBooking />, errorElement: <RouteError /> },
 
   // Protected App
   {

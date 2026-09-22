@@ -7,9 +7,6 @@ const lagosDateFormatter = new Intl.DateTimeFormat("en-GB", {
 
 const lagosDateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Africa/Lagos",
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
   hour: "numeric",
   minute: "2-digit",
   hour12: true,
@@ -35,7 +32,7 @@ export function formatDateTimeLagos(value?: string | Date | null, fallback = "â€
   if (!value) return fallback;
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return fallback;
-  return lagosDateTimeFormatter.format(d);
+  return `${formatDateLagos(d, fallback)} ${lagosDateTimeFormatter.format(d).toUpperCase()}`;
 }
 
 export function formatInteger(value?: number | string | null, fallback = "0") {

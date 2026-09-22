@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { publicFetch } from "@/lib/api";
+import { formatDateLagos } from "@/lib/format";
 import { usePageSeo } from "@/lib/usePageSeo";
 import {
   ArrowRight,
@@ -247,7 +248,7 @@ export default function Landing() {
     return recentTenants.map((t) => {
       const isDtt = t.name.toLowerCase().includes("dtt properties");
       const d = t.createdAt ? new Date(t.createdAt) : null;
-      const joinedDate = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString() : "Recently joined";
+      const joinedDate = d && !Number.isNaN(d.getTime()) ? formatDateLagos(d) : "Recently joined";
       return {
         id: t.id,
         name: t.name,

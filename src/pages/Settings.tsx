@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Building2, Gauge, RefreshCw, Save, Shield, SlidersHorizontal, UserPlus } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
+import { formatDateTimeLagos } from "@/lib/format";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,10 +71,7 @@ type CreateTenantForm = {
 const numberFmt = new Intl.NumberFormat("en-US");
 
 function formatDateTime(v?: string) {
-  if (!v) return "—";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
+  return formatDateTimeLagos(v);
 }
 
 function toDateInput(v?: string | null) {
@@ -674,9 +672,6 @@ export default function Settings() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground mt-2">
-            Workspace profile, tenant policy settings, and plan usage visibility.
-          </p>
         </div>
 
         <div className="flex items-center gap-2">

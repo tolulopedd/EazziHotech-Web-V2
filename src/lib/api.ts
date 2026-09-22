@@ -53,7 +53,8 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   beginRequest();
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers }).finally(() => {
+  // Tenant-scoped operational data must always be fetched fresh.
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers, cache: "no-store" }).finally(() => {
     endRequest();
   });
 
